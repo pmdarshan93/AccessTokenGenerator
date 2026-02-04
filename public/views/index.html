@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+    <script src="/js/script.js" defer></script>
+    <link rel="stylesheet" href="/style/style.css">
+
+</head>
+<body>
+    <label>Client Id</label>
+    <input id="clientId" value="1000.79F036M9ZLSBZNO7WRD9DHGIADVPXH">
+    <label>Client Secret</label>
+    <input id="clientSecret" value="97937691c11c59eab4e7d00e2062332a7fd1cf3f26">
+    <p>Redirect Url should be <b>http://localhost:2507/getToken</b></p>
+    <button onclick="storeData()">Store Data</button>
+    
+    <h2><center>Access tokens are valid for 1 hour from the time of creation.</center></h2>
+    <table class="tableData">
+        <thead>
+            <tr>
+                <td>Project</td>
+                <td>Scope</td>
+                <td>Refresh Token</td>
+                <td>Access Token</td>
+                <td>Created Time</td>
+                <td>Status</td>
+            </tr>
+        </thead>
+        <tbody id="allProjects"></tbody>
+    </table>
+    <div id="scopeList" class="hide">
+</body>
+</html>

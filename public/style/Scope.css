@@ -1,0 +1,26 @@
+*{
+    padding : 0px;
+    margin : 0px;
+    box-sizing: border-box;
+}
+
+#scopeList{
+    width : 100vw;
+    height : 100vh;
+    padding : 5% 20%;
+    background-color: rgba(0, 0, 0, 0.164);
+    position: absolute;
+    top : 0px;
+    left : 0px;
+}
+
+#scopeList div{
+    background-color: white ;
+    padding : 3%;
+    display:flex;
+    justify-content: space-evenly;
+}
+
+.hide{
+    display: none;
+}
