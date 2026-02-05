@@ -482,6 +482,7 @@ return object;
 app.delete("/clearProjectTrash", async (req, res) => {
     try {
         let result = await clearProjectTrash();
+        console.log(result)
         console.log("Rows deleted:", result.affectedRows);
         res.json({
             message: "Project trash cleared",
@@ -493,12 +494,12 @@ app.delete("/clearProjectTrash", async (req, res) => {
     }
 });
 
-async function clearProjectTrash() {
+function clearProjectTrash() {
     const query = "delete from project_trash";
     return new Promise((resolve, reject) => {
         connection.query(query, (err, result) => {
             if (err) {
-                console.error("ERROR\n", err);
+                console.error("ERROR : ", err);
                 return reject(err);
             }
             resolve(result);
@@ -520,9 +521,13 @@ function clearClientTrash() {
 
 app.delete("/clearClientTrash", async (req, res) => {
     try {
-        const rows = await clearClientTrash();
-        res.json({ message: "Client trash cleared", deletedRows: rows });
+        const result = await clearClientTrash();
+        console.log(result)
+        res.json({ 
+            message: "Client trash cleared", 
+            deletedRows: result.affectedRows
+        });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        res.sendStatus(500);
     }
 });

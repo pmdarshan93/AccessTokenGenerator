@@ -238,5 +238,5 @@ async function clearAllClientTrash(){
     
 }
 
-clearAllClientTrash()
-// clearAllProjectsTrash();
+// clearAllClientTrash()
+clearAllProjectsTrash();
