@@ -54,10 +54,74 @@ async function addProject(){
         alert ("Error in getting details")
     }
 }
+
+async function editClient(){
+    let request = await fetch("/editClient",{
+        method : "POST",
+        headers : {
+            'Content-Type' : "Application/json"
+        },
+        body : JSON.stringify({
+            "name" : "Edit testing",
+            "description"  : "EDITING DONE ",
+            "clientId" : 1
+        })
+    })
+    console.log(request);
+}
+
+async function deleteClient(){
+let request= await fetch('/deleteClient',{
+    method : "POST",
+    headers : {
+        "Content-Type"  : "Application/json"
+    },
+    body : JSON.stringify({
+        "reason" : "TESTING DELETING",
+        "clientId" : 1
+    })
+})
+console.log(request);
+}
+
+async function editProject(){
+    let request= await fetch("/editProject",{
+        method : "POST",
+        headers : {
+            "Content-Type" : "Application/json"
+        },
+        body : JSON.stringify({
+            name : "NEW EDIT TEST",
+            description : "EDITING SUCCESSFUL",
+            auto_regeneration : true,
+            project_id : 1
+        })
+    })
+    console.log(request);
+}
+
+async function deleteProject(){
+    let request= await fetch("/deleteProject",{
+        method : "POST",
+        headers : {
+            "Content-Type" : "Application/json"
+        },
+        body : JSON.stringify({
+            project_id : 1,
+            reason : "DELETE Test"
+        })
+    })
+    console.log(request);
+}
 // AddClient();
 // getAllClients();
 // getAllProjects();
-addProject();
+// addProject();
+// editClient();
+// deleteClient();
+// getProjectsOfClient
+// editProject();
+deleteProject();
 
 // let allProjects;
 // let scopeList=document.querySelector("#scopeList");
