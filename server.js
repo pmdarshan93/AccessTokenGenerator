@@ -494,11 +494,11 @@ app.delete("/clearProjectTrash", async (req, res) => {
 });
 
 async function clearProjectTrash() {
-    const query = "DELETE FROM project_trash";
+    const query = "delete from project_trash";
     return new Promise((resolve, reject) => {
         connection.query(query, (err, result) => {
             if (err) {
-                console.error("CLEAR PROJECT TRASH ERROR\n", err);
+                console.error("ERROR\n", err);
                 return reject(err);
             }
             resolve(result);
@@ -506,11 +506,13 @@ async function clearProjectTrash() {
     });
 }
 
-function clearTrash(table) {
+function clearClientTrash() {
     return new Promise((resolve, reject) => {
-        const query = `DELETE FROM ${table}`;
+        const query = "delete from client_trash";
         connection.query(query, (err, result) => {
-            if (err) return reject(err);
+            if(err){
+                return reject(err);
+            }
             resolve(result.affectedRows);
         });
     });
@@ -518,7 +520,7 @@ function clearTrash(table) {
 
 app.delete("/clearClientTrash", async (req, res) => {
     try {
-        const rows = await clearTrash("client_trash");
+        const rows = await clearClientTrash();
         res.json({ message: "Client trash cleared", deletedRows: rows });
     } catch (err) {
         res.status(500).json({ error: err.message });
