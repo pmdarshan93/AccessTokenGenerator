@@ -479,41 +479,48 @@ return object;
 
 
 
-app.get("/clearProjectTrash",(req,res)=>{
-    const query = "delete from project_trash";
-    return new Promise((resolve,reject)=>{
-        connection.query(query,(err,result)=>{
-            if(err){
-                console.log("CLEAR PROJECT TRASH ERROR \n",err);
-            }
-            console.log("RESULT : "+result)
-            resolve(result.affectedRows==1);
-        })
-    })
-})
+app.delete("/clearProjectTrash", async (req, res) => {
+    try {
+        let result = await clearProjectTrash();
+        console.log("Rows deleted:", result.affectedRows);
+        res.json({
+            message: "Project trash cleared",
+            deletedRows: result.affectedRows
+        });
+    } catch(err) {
+        console.error("Error clearing project trash:", err);
+        res.sendStatus(500);
+    }
+});
 
-app.get("/clearProjectTrash",(req,res)=>{
-    const query = "delete from project_trash";
-    return new Promise((resolve,reject)=>{
-        connection.query(query,(err,result)=>{
-            if(err){
-                console.log("CLEAR PROJECT TRASH ERROR \n",err);
+async function clearProjectTrash() {
+    const query = "DELETE FROM project_trash";
+    return new Promise((resolve, reject) => {
+        connection.query(query, (err, result) => {
+            if (err) {
+                console.error("CLEAR PROJECT TRASH ERROR\n", err);
+                return reject(err);
             }
-            console.log("RESULT : "+result)
-            resolve(result.affectedRows==1);
-        })
-    })
-})
+            resolve(result);
+        });
+    });
+}
 
-app.get("/clearClientTrash",(req,res)=>{
-    const query = "delete from client_trash";
-    return new Promise((resolve,reject)=>{
-        connection.query(query,(err,result)=>{
-            if(err){
-                console.log("CLEAR PROJECT TRASH ERROR \n",err);
-            }
-            console.log("RESULT : "+result)
-            resolve(result.affectedRows==1);
-        })
-    })
-})
+function clearTrash(table) {
+    return new Promise((resolve, reject) => {
+        const query = `DELETE FROM ${table}`;
+        connection.query(query, (err, result) => {
+            if (err) return reject(err);
+            resolve(result.affectedRows);
+        });
+    });
+}
+
+app.delete("/clearClientTrash", async (req, res) => {
+    try {
+        const rows = await clearTrash("client_trash");
+        res.json({ message: "Client trash cleared", deletedRows: rows });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
