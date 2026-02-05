@@ -57,7 +57,7 @@ async function addProject(){
 // AddClient();
 // getAllClients();
 // getAllProjects();
-addProject();
+// addProject();
 
 // let allProjects;
 // let scopeList=document.querySelector("#scopeList");
@@ -216,3 +216,27 @@ addProject();
 //     }
 // } 
 
+
+
+async function clearAllProjectsTrash(){
+    let request= await fetch("/clearProjectTrash",{
+        method:"DELETE"
+    });
+    console.log(request)
+    let list=await request.json();
+    console.log(list);
+    
+}
+
+async function clearAllClientTrash(){
+    let request= await fetch("/clearClientTrash",{
+        method:"DELETE"
+    });
+    console.log(request)
+    let list=await request.json();
+    console.log(list);
+    
+}
+
+clearAllClientTrash()
+// clearAllProjectsTrash();
