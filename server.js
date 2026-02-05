@@ -5,7 +5,7 @@ const port = 2507;
 
 const queryString = require('querystring')
 const { connection } = require('./public/utils/dbConnection');
-const { rejects } = require('assert');
+
 
 app.use(express.static(path.join(__dirname, "public")))
 app.set("views", path.join(__dirname, 'public/views'))
@@ -128,129 +128,80 @@ app.get("/getProjectsOfClient", async (req, res) => {
     }
 })
 
-app.post("/editProject",async (req,res)=>{
-    let {name,description,auto_regeneration,project_id} = req.body;
-    try{
-        let editStatus = updateProjectInDb(name,description,auto_regeneration,project_id);
-        if(editStatus){
+app.post("/editProject", async (req, res) => {
+    let { name, description, auto_regeneration, project_id } = req.body;
+    try {
+        let editStatus = updateProjectInDb(name, description, auto_regeneration, project_id);
+        if (editStatus) {
             return res.sendStatus(200)
         }
         res.sendStatus(404)
-    }catch(err){
+    } catch (err) {
         console.log(err);
         res.sendStatus(500);
     }
 })
 
-app.post("/deleteProject",async (req,res)=>{
-    let {project_id , reason} = req.body;
-    try{
-        let deleteStatus = await deleteProject(project_id,reason);
-        if(deleteStatus){
+app.post("/deleteProject", async (req, res) => {
+    let { project_id, reason } = req.body;
+    try {
+        let deleteStatus = await deleteProject(project_id, reason);
+        if (deleteStatus) {
             return res.sendStatus(200)
         }
         res.sendStatus(404);
-    }catch(err){
+    } catch (err) {
         console.log(err);
         res.sendStatus(500)
     }
 })
 
-app.post("/regenerateToken",async (req,res)=>{
-    let {projectId} =req.body;
-    try{
-        let clie
+app.post("/regenerateToken", async (req, res) => {
+    let { projectId } = req.body;
+    try {
+        let tokens = await getTokenFromDb(projectId);
+        let project = await getProjectDetailsFromDb(projectId);
+        let client = await getClientDetailsFromDB(project.client_id);
+        let newAccessToken = await regenerateToken(client.client_id, client.client_secret, tokens.refreshToken);
+        let updateStatus = await updateAccessToken(tokens.token_id, newAccessToken);
+        if (updateStatus) {
+            return res.json(newAccessToken);
+        }
+        res.sendStatus(404);
+    } catch (err) {
+        console.log(err)
+        res.sendStatus(500);
     }
 })
 
-// app.get('/getAllProjects',async(req,res)=>{
-//     try{
-//         let allProjects = await getAllProjectsFromDb();
-//         res.json(allProjects)
-//     }catch(err){
-//         res.sendStatus(err)
-//     }
-// })
+app.post("/restoreClient", async (req, res) => {
+    let { trashId } = req.body;
+    try {
+        let restoreStatus = await restoreClient(trashId);
+        if (restoreStatus) {
+            return res.sendStatus(200);
+        }
+        res.sendStatus(404);
+    } catch (err) {
+        console.log(err);
+        res.sendStatus(500);
+    }
+})
 
-
-// app.post("/storeData",async (req,res)=>{
-//     let {clientId, clientSecret}=req.body
-//     try{
-//     let store = await storeDataInDb(clientId,clientSecret);
-//     let id = await getLength();
-//     return res.status(200).json(id.length);
-//     }catch(err){
-//     return res.sendStatus(err)
-//     }
-// })
-
-// app.get("/scope",(req,res)=>{
-//     res.sendFile(path.join(__dirname, "public", "views", "scope.html"))
-// })
-
-// app.post("/getCredentials",async (req,res)=>{
-//     let {scope,project} = req.body
-//     try{
-//     let status = await checkDuplicateInDb(project);
-//     if(status){
-//         let updateStatus= await updateScopeInDb(scope,project);
-//         if(updateStatus){
-//         let details= await getDetailsFromDb();
-//         let clientId=details.client_id;
-//         res.json({"clientId":clientId})
-//         }
-//     }else{
-//         res.sendStatus(409)
-//     }
-//     }catch(err){
-//         res.sendStatus(err)
-//     }
-
-// })
-
-
-// app.post('/getLastGenratedToken',async(req,res)=>{
-//     res.json(await getDetailsFromDb());
-// })
-
-// app.get("/getToken",async(req,res)=>{
-//     let code = req.query.code
-//     let details = await getDetailsFromDb();
-//     console.log(details)
-//     // let tokenAlreadyCreated= await verifyAccessToken();
-//     // if(!tokenAlreadyCreated){
-//     let tokens=await genrateTokens(code,details.client_id,details.client_secret);
-//     console.log(tokens);
-//     try{
-//     let status= await storeTokensInDb(tokens);
-//     if(!status){
-//         res.sendStatus(405);
-//     }
-//     }catch(err){
-//         res.sendStatus(err)
-//     }
-// // }
-//     res.sendFile(path.join(__dirname, "public", "views", "token.html"))
-// })
-
-// app.post('/regenrateAccessToken',async(req,res)=>{
-//     let {project_name,scope}=req.body;
-//     try{
-//     let details = await getDetailsFromDbForProjectAndScope(project_name,scope);
-//     let token = await genrateAccessToken(details.client_id,details.client_secret,details.refresh_token);
-//     // let token = "1000.a44553af20eab4ace9bb8a73cd9c9d17.663f1b8ff66bb06427d2d7bcd5bf2af1"
-//     let update =await  updateAccessTokenInDb(token,project_name,scope);
-//     console.log(token);
-//     if(update){
-//     let details = await getDetailsFromDbForProjectAndScope(project_name,scope);
-//       return  res.json(details)
-//     }
-//     res.sendStatus(500);
-//     }catch(err){
-//         res.sendStatus(err);
-//     }
-// })
-
+app.post("/restoreProject", async (req, res) => {
+    let { trashid } = req.body;
+    try {
+        let restoreStatus = await restoreProject(trashid);
+        if (restoreStatus) {
+            let clientDetails = await getClientDetailsFromDB(restoreStatus.client_id);
+            return res.sendStatus(200);
+        }
+        res.sendStatus(404);
+    } catch (err) {
+        console.log(err);
+        res.sendStatus(500);
+    }
+})
 
 // ========================== DB
 
@@ -382,20 +333,37 @@ async function deleteClient(clientId, reason) {
     let query = "update client set is_trashed=true where id = ?";
     let trashQuery = "insert into client_trash (deleted_date,reason,client_id) values (?,?,?)"
     return new Promise((resolve, reject) => {
-        connection.query(query, [clientId], (err, result) => {
+        connection.beginTransaction((err) => {
             if (err) {
-                console.log("DELETE CLIENT UPDATE IS TRASHED ERROR\n", err);
+                console.log("DELETE CLIENT TRANSACTION ERROR", err);
                 reject(500);
             }
-            if (result.affectedRows == 1) {
-                connection.query(trashQuery, [new Date(), reason, clientId], (errr, result2) => {
-                    if (errr) {
-                        console.log("INSERT IN CLIENT TRASH ERROR \n", err);
-                        reject(500);
-                    }
-                    resolve(result2.affectedRows === 1);
-                })
-            }
+
+            connection.query(query, [clientId], (err, result) => {
+                if (err) {
+                    console.log("DELETE CLIENT UPDATE IS TRASHED ERROR\n", err);
+                    return connection.rollback(() => reject(500));
+                }
+                if (result.affectedRows == 1) {
+                    connection.query(trashQuery, [new Date(), reason, clientId], (errr, result2) => {
+                        if (errr) {
+                            console.log("INSERT IN CLIENT TRASH ERROR \n", errr);
+                            return connection.rollback(() => reject(500));
+                        }
+                        if (result2.affectedRows === 1) {
+                            connection.commit((err) => {
+                                if (err) {
+                                    console.log("DELETE CLIENT TRANSACTION COMMIT ERROR", err);
+                                    return connection.rollback(() => reject(500));
+                                }
+                                resolve(true);
+                            })
+                        } else {
+                            return connection.rollback(() => reject(500))
+                        }
+                    })
+                }
+            })
         })
     })
 }
@@ -413,186 +381,184 @@ async function getProjectOfClient(clientId) {
     })
 }
 
-async function updateProjectInDb(name,description,auto_regeneration,project_id){
+async function updateProjectInDb(name, description, auto_regeneration, project_id) {
     let query = "update project set name=? , description = ?,auto_regeneration=? where project_id = ?";
-    return new Promise((resolve,reject)=>{
-        connection.query(query,[name,description,auto_regeneration,project_id],(err,result)=>{
-            if(err){
-                console.log("UPDATE PROJECT IN DB ERROR",err);
+    return new Promise((resolve, reject) => {
+        connection.query(query, [name, description, auto_regeneration, project_id], (err, result) => {
+            if (err) {
+                console.log("UPDATE PROJECT IN DB ERROR", err);
                 reject(500);
             }
-            resolve(result.affectedRows===1);
+            resolve(result.affectedRows === 1);
         })
     })
 }
 
-async function deleteProject(projectId,reason){
-    let query= "update project set is_trashed=true where project_id = ?";
+async function deleteProject(projectId, reason) {
+    let query = "update project set is_trashed=true where project_id = ?";
     let trashQuery = "insert into project_trash (deleted_date,reason,project_id) values (?,?,?)"
-    return new Promise((resolve,reject)=>{
-        connection.query(query,[projectId],(err,result)=>{
-            if(err){
-                console.log("DELETE PROJECT ERROR",err);
+    let tokenQuery = "delete from token where project_id = ?"
+    return new Promise((resolve, reject) => {
+        connection.beginTransaction((err) => {
+            if (err) {
+                console.log("DELETE PROJECT TRANSACTION ERROR", err);
+                reject(500);
+            }
+            connection.query(query, [projectId], (err, result) => {
+                if (err) {
+                    console.log("DELETE PROJECT ERROR", err);
+                    return connection.rollback(() => reject(500));
+                }
+                if (result.affectedRows === 1) {
+                    connection.query(trashQuery, [new Date(), reason, projectId], (errr, result2) => {
+                        if (errr) {
+                            console.log("INSERT IN PROJECT TRASH ERROR", err)
+                            return connection.rollback(() => reject(500));
+                        }
+                        if (result.affectedRows === 1) {
+                            connection.query(tokenQuery, projectId, (err, result) => {
+                                if (err) {
+                                    console.log("TOKEN DELETE ERR", err)
+                                    return connection.rollback(() => reject(500));
+                                }
+                                if (result.affectedRows === 1) {
+                                    connection.commit((err) => {
+                                        if (err) {
+                                            console.log("DELETE PROJECT COMMIT ERROR\n", err)
+                                            return connection.rollback(() => reject(500))
+                                        }
+                                        resolve(true);
+                                    })
+                                } else {
+                                    return connection.rollback(() => reject(500));
+                                }
+                            })
+                        };
+                    })
+                }
+            })
+        })
+    })
+}
+
+async function getTokenFromDb(projectId) {
+    let query = "select * from token where project_id = ? and is_trashed = false";
+    return new Promise((resolve, reject) => {
+        connection.query(query, [projectId], (err, result) => {
+            if (err) {
+                console.log("GET PROJECT DETAIL ERROR", err);
+            }
+            resolve(result[0]);
+        })
+    })
+}
+
+async function getProjectDetailsFromDb(projectId) {
+    let query = "select * from project where project_id = ? and is_trashed = false";
+    return new Promise((resolve, reject) => {
+        connection.query(query, [projectId], (err, result) => {
+            if (err) {
+                console.log("GET PROJECT DETAILS ERR\n", err)
+                reject(500);
+            }
+            resolve(result[0]);
+        })
+    })
+}
+
+async function updateAccessToken(tokenId, accessToken) {
+    let query = "update tokens set access_token = ? where token_id = ?";
+    return new Promise((resolve, reject) => {
+        connection.query(query, [accessToken, tokenId], (err, result) => {
+            if (err) {
+                console.log("UPDATE ACCESS TOKEN ERROR", err)
                 reject(500)
             }
-            if(result.affectedRows===1){
-                connection.query(trashQuery,[new Date(),reason,projectId],(errr,result2)=>{
-                    if(errr){
-                        console.log("INSERT IN PROJECT TRASH ERROR",err)
-                        reject(500);
-                    }
-                    resolve(result.affectedRows===1);
-                })
-            }
+            resolve(result.affectedRows === 1);
         })
     })
 }
 
-// async function addProject(name,description,scope){
-//     let query="insert into project "
-// }
+async function restoreClient(trashId) {
+    let query = "select client_id from client_trash where trash_id = ?";
+    let restoreQuery = "update client set is_trashed= false where id = ?";
+    let deleteTrash = "delete client_trash where trash_id = ?";
+    return new Promise((resolve, reject) => {
+        connection.beginTransaction((err) => {
+            if (err) {
+                console.log("RESTORE CLIENT TRANSACTION ERROR \n", err);
+                reject(500);
+            }
 
-// async function getAllProjectsFromDb(){
-//     let query= "select project_name,scope,refresh_token,access_token,created_time from  userTokens";
-//     return new Promise((resolve,reject)=>{
-//         connection.query(query, (err,result)=>{
-//         if(err){
-//             console.log(err)
-//             return reject(505)
-//         }
-//         resolve(result)
-//     })
-//     })
-// }
-
-// async function storeDataInDb(clientId,clientSecret){
-//     let query = "insert into userTokens ( access_token,refresh_token,client_id,client_secret,created_time)values (?,?,?,?,?)"
-//     return new Promise((resolve,reject)=>{
-//         connection.query(query,[null,null,clientId,clientSecret,null],(err,result)=>{
-//         if(err){
-//             console.log(err)
-//             reject(505)
-//         }
-//         console.log(result)
-//         resolve(200)
-//         // res.redirect('/get_refresh_token')
-//     })
-// })
-// }
-
-// async function checkDuplicateInDb(project){
-//     let query="select * from userTokens where project_name = ?";
-//     return new Promise((resolve,reject)=>{
-//         connection.query(query,[project],(err,result)=>{
-//             if(err){
-//                 console.log(err)
-//                 reject(505)
-//             }
-//             resolve(result.length===0)
-//         })
-//     })
-// }
-
-// async function updateScopeInDb(scope,project){
-//     let length=await getLength();
-//     let query = "update userTokens set scope= ?,project_name = ? where id =?"
-//     return new Promise((resolve,reject)=>{
-//         connection.query(query,[scope,project,length.length],(err,result)=>{
-//         if(err){
-//             console.log(err);
-//             reject(505)
-//         }
-//         console.log(result)
-//         resolve(result.affectedRows===1)
-//     })
-//     });
-// }
-
-// async function getDetailsFromDb(){
-//         let ans = await getLength();
-//         let query = "select * from userTokens where id = ?";
-//         return new Promise((resolve, reject) =>{
-//             connection.query(query, [ans.length],(err,result)=>{
-//             if(err){
-//                 console.log(err)
-//                 return reject(505)
-//             }
-//             resolve(result[0])
-//         })
-//     })
-// }
-
-// async function storeTokensInDb(tokens){
-//     let query = "update userTokens set refresh_token = ?, access_token = ?,created_time = ? where id = ?";
-//     let length = await getLength();
-//     return new Promise((resolve,reject)=>{
-//         connection.query(query,[tokens.refresh_token,tokens.access_token,new Date().getTime().toString(),length.length],(err,result)=>{
-//         if(err){
-//             console.log(err)
-//             reject(505)
-//         }
-//         console.log(result)
-//         resolve(result.affectedRows===1)
-//     })
-//     })
-// }
-
-// async function getDetailsFromDbForProjectAndScope(project_name,scope){
-//     let query="select * from userTokens where project_name= ? and scope = ?";
-//     return new Promise((resolve,reject)=>{
-//         connection.query(query,[project_name,scope],(err,result)=>{
-//             if(err){
-//                 console.log(err);
-//                 reject(505);
-//             }
-//             console.log(result);
-//             resolve(result[0]);
-//         })
-//     })
-// }
+            connection.query(query, trashId, (err, result) => {
+                if (err) {
+                    console.log("RESTORE CLIENT GET CLIENT ID ERR", err);
+                    return connection.rollback(() => reject(500));
+                }
+                connection.query(restoreQuery, [result[0]], (errr, result2) => {
+                    if (errr) {
+                        console.log("RESTORE CLIENT ERROR\n", errr);
+                        return connection.rollback(() => reject(500));
+                    }
+                    connection.query(deleteTrash, [trashId], (errrr, result3) => {
+                        if (errrr) {
+                            console.log("DELETE FROM TRASH", errrr);
+                            return connection.rollback(() => reject(500));
+                        }
+                        if (result3.affectedRows === 1) {
+                            connection.commit((err) => {
+                                if (err) {
+                                    connection.rollback(() => reject(500));
+                                }
+                                resolve(true);
+                            })
+                        }
+                    })
+                })
+            })
+        })
+    })
+}
 
 
-// function getLength(){
-//     let query = "select count(*) as length from userTokens";
-//     return new Promise((resolve,reject)=>{
-//         connection.query(query,(err,result)=>{
-//             if(err){
-//                 console.log(err)
-//                 reject(505)
-//             }
-//             resolve(result[0])
-//         })
-//     })
-// }
+async function restoreProject(trashId) {
+    let query = "select project_id from project_trash where trash_id = ?";
+    let restoreQuery = "update project set is_trashed= false where project_id = ?";
+    let deleteTrash = "delete project_trash where trash_id = ?";
 
-// async function verifyAccessToken(){
-//     let query = "select refresh_token as token from userTokens where id = ?";
-//     let length = await getLength();
-//     return new Promise( (resolve,reject)=>{
-//         connection.query(query,[length.length],(err,result)=>{
-//             if(err){
-//                 console.log(err)
-//                 reject(505);
-//             }
-//             console.log(result)
-//             resolve(result[0].token!=null)
-//         })
-//     })
-// }
+    return new Promise((resolve, reject) => {
+        connection.beginTransaction((err) => {
+            if (err) {
+                console.log("RESTORE PROJECT TRANSACTION ERROR\n", err)
+                reject(500);
+            }
+            connection.query(query, [trashid], (err, result) => {
+                if (err) {
+                    console.log("GET PROJECT iD ERROR\n", err);
+                    return connection.rollback(() => reject(500))
+                }
+                connection.query(restoreQuery, [result[0]], (errr, result2) => {
+                    if (errr) {
+                        console.log("UPDATE PROJECT IS TRASHED ERR\n", err);
+                        return connection.rollback(() => reject(500));
+                    }
+                    if (result.affectedRows === 1) {
+                        connection.commit((err) => {
+                            if (err) {
+                                console.log("UPDATE PROJECT COMMIT ERROR", err);
+                                return connection.rollback(() => reject(500))
+                            }
+                            resolve(true);
+                        })
+                    } else {
+                        return connection.rollback(() => reject(500));
+                    }
+                })
+            })
+        })
+    })
+}
 
-// async function updateAccessTokenInDb(token,project_name,scope){
-//     let query="update  userTokens set access_token = ?,created_time=? where project_name = ? and scope = ?";
-//     return new Promise ( (resolve, reject)=>{
-//         connection.query(query,[token,new Date().getTime().toString(),project_name,scope],(err,result)=>{
-//             if(err){
-//                 console.log(err);
-//                 reject(505);
-//             }
-//             console.log(result);
-//             resolve(result.affectedRows==1);
-//         })
-//     })
-// }
 
 //============================================
 
@@ -614,20 +580,20 @@ async function genrateTokens(grandToken, clientId, clientSecret) {
     return object;
 }
 
-// async function genrateAccessToken(clientId,clientSecret,refreshToken){
-// let response = await fetch("https://accounts.zoho.in/oauth/v2/token",{
-//   method : "POST",
-//   headers : {
-//     "Content-Type": "application/x-www-form-urlencoded"
-//   },
-//   body : queryString.stringify({
-//     client_id : clientId,
-//     client_secret : clientSecret,
-//     grant_type : "refresh_token",
-//     refresh_token : refreshToken
-//   })
-// })
-// let newToken = await response.json();
-// console.log(newToken)
-// return newToken.access_token;
-// }
+async function regenerateToken(clientId, clientSecret, refreshToken) {
+    let response = await fetch("https://accounts.zoho.in/oauth/v2/token", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/x-www-form-urlencoded"
+        },
+        body: queryString.stringify({
+            client_id: clientId,
+            client_secret: clientSecret,
+            grant_type: "refresh_token",
+            refresh_token: refreshToken
+        })
+    })
+    let newToken = await response.json();
+    console.log(newToken)
+    return newToken.access_token;
+}

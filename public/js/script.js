@@ -113,6 +113,21 @@ async function deleteProject(){
     })
     console.log(request);
 }
+
+async function regenerate(){
+let request = await fetch("/regenerateToken",{
+    method : "POST",
+    headers : {
+        "Content-Type" :"Application/json"
+    },
+    body : {
+        "projectId" : 1
+    }
+})
+console.log(request)
+let response = await request.json();
+console.log(response);
+}
 // AddClient();
 // getAllClients();
 // getAllProjects();
@@ -121,7 +136,7 @@ async function deleteProject(){
 // deleteClient();
 // getProjectsOfClient
 // editProject();
-deleteProject();
+// deleteProject();
 
 // let allProjects;
 // let scopeList=document.querySelector("#scopeList");
