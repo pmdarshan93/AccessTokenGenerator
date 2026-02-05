@@ -100,16 +100,16 @@ app.get('/newProject',async  (req, res) => {
 // })
 
 
-// app.post("/storeData",async (req,res)=>{
-//     let {clientId, clientSecret}=req.body
-//     try{
-//     let store = await storeDataInDb(clientId,clientSecret);
-//     let id = await getLength();
-//     return res.status(200).json(id.length);
-//     }catch(err){
-//     return res.sendStatus(err)
-//     }
-// })
+app.post("/storeData",async (req,res)=>{
+    let {clientId, clientSecret}=req.body
+    try{
+    let store = await storeDataInDb(clientId,clientSecret);
+    let id = await getLength();
+    return res.status(200).json(id.length);
+    }catch(err){
+    // return res.sendStatus(err)
+    }
+})
 
 // app.get("/scope",(req,res)=>{
 //     res.sendFile(path.join(__dirname, "public", "views", "scope.html"))
@@ -475,3 +475,45 @@ return object;
 // console.log(newToken)
 // return newToken.access_token;
 // }
+
+
+
+
+app.get("/clearProjectTrash",(req,res)=>{
+    const query = "delete from project_trash";
+    return new Promise((resolve,reject)=>{
+        connection.query(query,(err,result)=>{
+            if(err){
+                console.log("CLEAR PROJECT TRASH ERROR \n",err);
+            }
+            console.log("RESULT : "+result)
+            resolve(result.affectedRows==1);
+        })
+    })
+})
+
+app.get("/clearProjectTrash",(req,res)=>{
+    const query = "delete from project_trash";
+    return new Promise((resolve,reject)=>{
+        connection.query(query,(err,result)=>{
+            if(err){
+                console.log("CLEAR PROJECT TRASH ERROR \n",err);
+            }
+            console.log("RESULT : "+result)
+            resolve(result.affectedRows==1);
+        })
+    })
+})
+
+app.get("/clearClientTrash",(req,res)=>{
+    const query = "delete from client_trash";
+    return new Promise((resolve,reject)=>{
+        connection.query(query,(err,result)=>{
+            if(err){
+                console.log("CLEAR PROJECT TRASH ERROR \n",err);
+            }
+            console.log("RESULT : "+result)
+            resolve(result.affectedRows==1);
+        })
+    })
+})
