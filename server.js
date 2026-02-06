@@ -5,6 +5,7 @@ const port = 2507;
 
 const queryString = require('querystring')
 const { connection } = require('./public/utils/dbConnection');
+const { error } = require('console');
 
 app.use(express.static(path.join(__dirname, "public")))
 app.set("views", path.join(__dirname, 'public/views'))
@@ -258,7 +259,7 @@ async function createProjectInDb(name, description, scope, clientId, autoRegener
     return new Promise((resolve, reject) => {
         connection.query(query, [name, description, scope, autoRegeneration, clientId], (err, result) => {
             if (err) {
-                console.log(" CREATE PROJECT IN Db ERROR", err);
+                console.log("CREATE PROJECT IN Db ERROR", err);
                 reject(500);
             }
             resolve(result.insertId);
@@ -477,11 +478,85 @@ return object;
 // }
 
 
+function getAllClientTrash() {
+    const query = "select * from client_trash";
+    return new Promise((resolve, reject) => {
+        connection.query(query, (err, result) => {
+            if (err) {
+                console.error("ERROR : ", err);
+                return reject(err);
+            }
+            resolve(result);
+        });
+    });
+}
+app.get("/getAllClientTrash", async (req, res) => {
+    try {
+        let result = await getAllClientTrash();
+        res.json(result);
+    } catch(err) {
+        console.error("Error read all client details from trash:", err);
+        res.sendStatus(500);
+    }
+});
+function getAllProjectTrash(id) {
+    const query = "select * from project p join client c on p.client_id = c.id join project_trash pt on p.project_id = pt.project_id where c.id = ?";
+    return new Promise((resolve, reject) => {
+        connection.query(query, [id],(err, result) => {
+            if (err) {
+                console.error("ERROR : ", err);
+                return reject(err);
+            }
+            resolve(result);
+        });
+    });
+}
+app.get("/getAllProjectTrash", async (req, res) => {
+    const {id} = req.query;
+    console.log(id)
+    try {
+        let result = await getAllProjectTrash(id);
+        res.json(result);
+    } catch(err) {
+        console.error("Error read all project details from trash:", err);
+        res.sendStatus(500);
+    }
+});
+
+function clearProjectTrash(client_id) {
+    const query = "delete p, pt from project p join project_trash pt ON pt.project_id = p.project_id WHERE p.client_id = ? and p.is_trashed = 1"; 
+
+    return new Promise((resolve, reject) => {
+        connection.beginTransaction(err => {
+            if (err) {
+                console.error("BEGIN TRANSACTION ERROR", err);
+                return reject(500);
+            }
+
+            connection.query(query, [client_id], (err, result) => {
+                if (err) {
+                    console.error("CLEAR PROJECT TRASH ERROR", err);
+                    return connection.rollback(() => reject(500));
+                }
+
+                connection.commit(commitErr => {
+                    if (commitErr) {
+                        console.error("COMMIT ERROR", commitErr);
+                        return connection.rollback(() => reject(500));
+                    }
+
+                    resolve(result);
+                });
+            });
+        });
+    });
+}
 
 
 app.delete("/clearProjectTrash", async (req, res) => {
+    const {id} = req.query;
     try {
-        let result = await clearProjectTrash();
+        let result = await clearProjectTrash(id);
         console.log(result)
         console.log("Rows deleted:", result.affectedRows);
         res.json({
@@ -494,27 +569,63 @@ app.delete("/clearProjectTrash", async (req, res) => {
     }
 });
 
-function clearProjectTrash() {
-    const query = "delete from project_trash";
-    return new Promise((resolve, reject) => {
-        connection.query(query, (err, result) => {
-            if (err) {
-                console.error("ERROR : ", err);
-                return reject(err);
-            }
-            resolve(result);
-        });
-    });
-}
-
 function clearClientTrash() {
     return new Promise((resolve, reject) => {
-        const query = "delete from client_trash";
-        connection.query(query, (err, result) => {
-            if(err){
-                return reject(err);
+        // const deleteProjectTrash = "delete from project_trash";
+        // const deleteProjects = "delete p,pt from project p join project_trash pt on p.project_id=pt.project_id where p.is_trashed = 1 ";
+        const deleteClientTrash = "delete from client_trash";
+        const deleteClients = "delete from client where is_trashed = 1";
+
+        connection.beginTransaction(err => {
+            if (err) {
+                console.error("BEGIN TRANSACTION ERROR", err);
+                return reject(500);
             }
-            resolve(result.affectedRows);
+
+            connection.query(deleteClients, (err, result) => {
+                if (err) {
+                    console.error("CLIENT DELETE ERROR", err);
+                    return connection.rollback(() => reject(500));
+                }
+
+
+                connection.query(deleteClientTrash, (err, result) => {
+                    if (err) {
+                        console.error("CLIENT TRASH DELETE ERROR", err);
+                        return connection.rollback(() => reject(500));
+                    }
+
+                    connection.commit(commitErr => {
+                        if (commitErr) {
+                            console.error("COMMIT ERROR", commitErr);
+                            return connection.rollback(() => reject(500));
+                        }
+
+                        resolve(true);
+                    })
+                    // connection.query(deleteProjects, (err, result) => {
+                    //     if (err) {
+                    //         console.error("PROJECT DELETE ERROR", err);
+                    //         return connection.rollback(() => reject(500));
+                    //     }
+                    //     connection.query(deleteProjectTrash,(err,result)=>{
+                    //         if (err) {
+                    //             console.error("PROJECT TRASH DELETE ERROR", err);
+                    //             return connection.rollback(() => reject(500));
+                    //         }
+                        //     connection.commit(commitErr => {
+                        //         if (commitErr) {
+                        //             console.error("COMMIT ERROR", commitErr);
+                        //             return connection.rollback(() => reject(500));
+                        //         }
+    
+                        //         resolve(true);
+                        //     });
+                        // })
+                        
+                    // });
+                });
+            });
         });
     });
 }
@@ -526,6 +637,106 @@ app.delete("/clearClientTrash", async (req, res) => {
         res.json({ 
             message: "Client trash cleared", 
             deletedRows: result.affectedRows
+        });
+    } catch (err) {
+        res.sendStatus(500);
+    }
+});
+
+function permanentlyDeleteProject(projectId){
+    return new Promise((resolve, reject) => {
+        const query = "delete from project_trash where project_id=?";
+        connection.beginTransaction(error=>{
+            if(error){
+                console.error("BEGIN TRANSACTION ERROR", err);
+                return reject(500);
+            }
+            connection.query(query, [projectId],(err, result) => {
+                if(!err){
+                    const project_del_id = "delete from project where project_id=?";
+                    connection.query(project_del_id, [projectId],(err, result) => {
+                        if(err){
+                            console.log(err)
+                            return connection.rollback(() => reject(500));
+                        }
+                        connection.commit((err) => {
+                            if (err) {
+                                console.log( err);
+                                return connection.rollback(() => reject(500))
+                            }
+                            resolve(true);
+                        })
+                    });
+                }
+            })
+
+        })
+        
+    });
+}
+
+app.delete("/permanentlyDeleteProject", async (req, res) => {
+    const {project_id} = req.query;
+    console.log(project_id)
+    try {
+        const result = await permanentlyDeleteProject(project_id);
+        console.log(result);
+        res.json({ 
+            message: "Project premnanely deleted", 
+        });
+    } catch (err) {
+        res.sendStatus(500);
+    }
+});
+
+
+function permanentlyDeleteClient(client_id){
+    return new Promise((resolve, reject) => {
+        const del_client_trash = "delete from client_trash where client_id=?";
+        const del_client = "delete from client where id=? and  is_trashed=1";
+        const del_project = "delete p,pt from project p join project_trash pt on p.project_id=pt.project_id where p.client_id=?"
+        connection.query(del_client_trash, [client_id],(err, result) => {
+            if(err){
+                console.log("DELETE CLIENT TRANSACTION ERROR\n", err)
+                reject(500);
+            }
+            connection.query(del_client, [client_id],(err, result) => {
+                if(err){
+                    console.log(err)
+                    return connection.rollback(() => reject(500))
+                }
+                else if(result){
+                    connection.query(del_project, [client_id],(err, result) => {
+                        if(err){
+                            console.log(err)
+                            return connection.rollback(() => reject(500))
+                        }
+                        if(result){
+                            connection.commit((err) => {
+                                if (err) {
+                                    console.log(err);
+                                    return connection.rollback(() => reject(500))
+                                }
+                                resolve(true);
+                            })
+                        }
+
+                    })
+                }
+                
+            });
+            
+        })
+    });
+}
+
+app.delete("/permanentlyDeleteClient", async (req, res) => {
+    const {client_id} = req.query;
+    try {
+        const result = await permanentlyDeleteClient(client_id);
+        console.log(result)
+        res.json({ 
+            message: "Client premnanely deleted", 
         });
     } catch (err) {
         res.sendStatus(500);

@@ -216,10 +216,23 @@ async function addProject(){
 //     }
 // } 
 
+async function getAllClientTrash(){
+    let request= await fetch("/getAllClientTrash");
+    console.log(request)
+    let list=await request.json();
+    console.log(list); 
+}
+
+async function getAllProjectTrash(){
+    let request= await fetch("/getAllProjectTrash?id=4");
+    console.log(request)
+    let list=await request.json();
+    console.log(list); 
+}
 
 
 async function clearAllProjectsTrash(){
-    let request= await fetch("/clearProjectTrash",{
+    let request= await fetch("/clearProjectTrash?id=5",{
         method:"DELETE"
     });
     console.log(request)
@@ -234,9 +247,34 @@ async function clearAllClientTrash(){
     });
     console.log(request)
     let list=await request.json();
+    console.log(list); 
+}
+
+async function permanentlyDeleteProject(){
+    let request= await fetch("/permanentlyDeleteProject?project_id=9",{
+        method:"DELETE"
+    });
+    console.log(request)
+    let list=await request.json();
+    console.log(list);
+    
+}
+
+async function permanentlyDeleteClient(){
+    let request= await fetch("/permanentlyDeleteClient?client_id=1",{
+        method:"DELETE"
+    });
+    console.log(request)
+    let list=await request.json();
     console.log(list);
     
 }
 
 // clearAllClientTrash()
-clearAllProjectsTrash();
+// clearAllProjectsTrash();
+// permanentlyDeleteProject()
+permanentlyDeleteClient();
+
+
+// getAllClientTrash();
+// getAllProjectTrash();
