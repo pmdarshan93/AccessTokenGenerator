@@ -2,9 +2,18 @@ const express = require('express')
 const path = require('path')
 const app = express();
 const port = 2507;
+const cors =require('cors');
 
 const queryString = require('querystring')
 const { connection } = require('./public/utils/dbConnection');
+
+app.use(cors({
+    origin: "*",
+    methods: ["GET", "POST", "PUT", "DELETE"],
+    credentials: true
+}));
+
+
 
 
 app.use(express.static(path.join(__dirname, "public")))
@@ -24,7 +33,7 @@ app.get("/", (req, res) => {
 app.get("/AllClients", async (req, res) => {
     try {
         let clientList = await getAllClients();
-        res.json(clientList);
+        res.json({"data" :clientList});
     } catch (err) {
         console.log(err)
         res.sendStatus(500);
