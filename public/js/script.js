@@ -39,7 +39,7 @@ async function addProject(){
         },
         body : JSON.stringify({
             clientId : 1,
-            scope : '.messageactions.DELETE',
+            scope : 'ZohoCliq.messageactions.DELETE,ZohoCliq.Messages.READ',
             description : 'testing',
             name : 'test',
             autoRegeneration : true
@@ -49,7 +49,7 @@ async function addProject(){
     if(request.status==200){
     let details = await request.json();
     console.log(details);
-    window.location.href= `https://accounts.zoho.in/oauth/v2/auth?response_type=code&client_id=${details.client_id}&scope=${"ZohoCliq.messageactions.DELETE"}&redirect_uri=http://localhost:2507/newProject&access_type=offline&prompt=consent&projectid=${details.insertId}`
+    window.location.href= `https://accounts.zoho.in/oauth/v2/auth?response_type=code&client_id=${details.client_id}&scope=${"ZohoCliq.messageactions.DELETE,ZohoCliq.Messages.READ"}&redirect_uri=http://localhost:2507/newProject&access_type=offline&prompt=consent&projectid=${details.insertId}`
     }else if(request.status==500){
         alert ("Error in getting details")
     }
@@ -128,6 +128,53 @@ console.log(request)
 let response = await request.json();
 console.log(response);
 }
+
+async function restoreClient(){
+    let request=await fetch("/restoreClient",{
+        method : "POST",
+        headers : {
+            "Content-Type" : "Application/json"
+        },
+        body : JSON.stringify({
+            "trashId" :6
+        })
+    })
+    console.log(request);
+}
+
+async function restoreProject(){
+    let request = await fetch("/restoreProject",{
+        method : "POST",
+        headers : {
+            "Content-Type" : "Application/json"
+        },
+        body : JSON.stringify({
+            "trashId" : 19
+        })
+    })
+    console.log(request)
+    console.log("ssssssssssss")
+        let details=await request.json();
+        console.log(details);
+        window.location.href= `https://accounts.zoho.in/oauth/v2/auth?response_type=code&client_id=${details.clientId}&scope=${"ZohoCliq.messageactions.DELETE"}&redirect_uri=http://localhost:2507/newProject&access_type=offline&prompt=consent&projectid=${details.projectId}`
+}
+
+async function editScope(){
+    let request = await fetch("/editScope",{
+        method : "POST",
+        headers : {
+            "Content-Type" : "Application/json"
+        },
+        body : JSON.stringify({
+            "projectId" : 2,
+            "scope" : 'ZohoCliq.Webhooks.CREATE'
+        })
+    })
+    console.log(request);
+    let clientId = await request.json();
+    console.log(clientId);
+    window.location.href= `https://accounts.zoho.in/oauth/v2/auth?response_type=code&client_id=${clientId}&scope=${"ZohoCliq.Webhooks.CREATE"}&redirect_uri=http://localhost:2507/newProject&access_type=offline&prompt=consent&projectid=${2}`
+}
 // AddClient();
 // getAllClients();
 // getAllProjects();
@@ -137,6 +184,9 @@ console.log(response);
 // getProjectsOfClient
 // editProject();
 // deleteProject();
+// restoreClient();
+// restoreProject();
+// editScope();
 
 // let allProjects;
 // let scopeList=document.querySelector("#scopeList");
@@ -151,7 +201,7 @@ console.log(response);
 //         let row=document.createElement('tr');
 //         //
 //         let accessToken=createRow(obj.access_token);
-//         accessToken.appendChild(createCopyButton());
+//         accessToken.arestoreStatusppendChild(createCopyButton());
 //         //
 //         let time=createRow(new Date(+obj.created_time).toLocaleString());
 //         let status=+obj.created_time+3600000>new Date().getTime();
