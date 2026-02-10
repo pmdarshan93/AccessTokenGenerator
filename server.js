@@ -1,11 +1,11 @@
 const express = require('express')
 const path = require('path')
+const cors = require('cors')
 const app = express();
 const port = 2507;
 
 const queryString = require('querystring')
 const { connection } = require('./public/utils/dbConnection');
-const { error } = require('console');
 
 app.use(express.static(path.join(__dirname, "public")))
 app.set("views", path.join(__dirname, 'public/views'))
@@ -20,11 +20,16 @@ app.listen(port, (err) => {
 app.get("/", (req, res) => {
     res.sendFile(path.join(__dirname, "public", "views", "index.html"))
 })
+app.use(cors({
+    origin: "*",
+    methods: ["GET", "POST", "PUT", "DELETE"],
+    credentials: true
+}));
 
 app.get("/AllClients", async (req, res) => {
     try{
     let clientList = await getAllClients();
-    res.json(clientList);
+    res.json({"data":clientList});
     }catch(err){
         res.sendStatus(err);
     }
@@ -438,7 +443,7 @@ async function createTokenInDB(token,projectId){
 //         })
 //     })
 // }
-
+// web gu
 //============================================
 
 async function genrateTokens(grandToken,clientId,clientSecret){
@@ -479,7 +484,8 @@ return object;
 
 
 function getAllClientTrash() {
-    const query = "select * from client_trash";
+    
+    const query = "select * from client_trash ct join client c on c.id=ct.client_id where c.is_trashed=1";
     return new Promise((resolve, reject) => {
         connection.query(query, (err, result) => {
             if (err) {
@@ -493,16 +499,18 @@ function getAllClientTrash() {
 app.get("/getAllClientTrash", async (req, res) => {
     try {
         let result = await getAllClientTrash();
-        res.json(result);
+        res.json({"data":result});
     } catch(err) {
         console.error("Error read all client details from trash:", err);
         res.sendStatus(500);
     }
 });
 function getAllProjectTrash(id) {
-    const query = "select * from project p join client c on p.client_id = c.id join project_trash pt on p.project_id = pt.project_id where c.id = ?";
+    
+    // const query = "select * from client c join project p on p.client_id = c.id join project_trash pt on p.project_id = pt.project_id where c.id = ?";
+    const query = "select * from client c join project p on p.client_id = c.id join project_trash pt on p.project_id = pt.project_id";
     return new Promise((resolve, reject) => {
-        connection.query(query, [id],(err, result) => {
+        connection.query(query,(err, result) => {
             if (err) {
                 console.error("ERROR : ", err);
                 return reject(err);
@@ -512,11 +520,11 @@ function getAllProjectTrash(id) {
     });
 }
 app.get("/getAllProjectTrash", async (req, res) => {
-    const {id} = req.query;
-    console.log(id)
+    console.log(req.params)
+    const {id} = req.params;
     try {
         let result = await getAllProjectTrash(id);
-        res.json(result);
+        res.json({"data":result});
     } catch(err) {
         console.error("Error read all project details from trash:", err);
         res.sendStatus(500);
