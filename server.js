@@ -3,12 +3,16 @@ const path = require('path')
 const app = express();
 const port = 2507;
 const cors =require('cors');
+const clipboardy = require('clipboardy');
+const copyPaste = require('copy-paste');
+
 
 const queryString = require('querystring')
 const { connection } = require('./public/utils/dbConnection');
 
+
 app.use(cors({
-    origin: "*",
+    origin: true,
     methods: ["GET", "POST", "PUT", "DELETE"],
     credentials: true
 }));
@@ -137,6 +141,19 @@ app.get("/getProjectsOfClient", async (req, res) => {
     }
 })
 
+app.get("/getProject",async (req,res)=>{
+    let {projectId} =req.query
+    try{
+        console.log(projectId)
+        let project= await getProjectDetailsFromDb(projectId)
+        console.log(project)
+        res.json(project);
+    }catch(err){
+        console.log(err);
+        res.sendStatus(500)
+    }
+})
+
 app.post("/editProject", async (req, res) => {
     let { name, description, auto_regeneration, project_id } = req.body;
     try {
@@ -231,6 +248,31 @@ app.post("/editScope",async (req,res)=>{
         reject(500);
     }
 })
+
+app.get("/allLog",async (req,res)=>{
+    try{
+        let log=await getLogFromDb();
+        log.forEach((ele)=>{ele.time=new Date(ele.time).toLocaleString("en-US", {
+  dateStyle: "short",
+  timeStyle: "short"
+})});
+        res.json({"data": log})
+    }catch(err){
+        console.log(err)
+        reject(500)
+    }
+})
+
+app.get("/getAllClientTrash", async (req, res) => {
+    try {
+        let result = await getAllClientTrash();
+        res.json({"data":result});
+    } catch(err) {
+        console.error("Error read all client details from trash:", err);
+        res.sendStatus(500);
+    }
+});
+
 
 // ========================== DB
 
@@ -628,6 +670,35 @@ async function updateScopeInDb(projectId,scope){
             resolve(result.affectedRows===1);
         })
     })
+}
+
+async function getLogFromDb(){
+    let query= "select * from log";
+    return new Promise((resolve,reject)=>{
+        connection.query(query,(err,result)=>{
+            if(err){
+                console.log("GET LOG FROM DB ERROR",err)
+                reject(500);
+            }
+            resolve(result)
+        })
+        
+    })
+}
+
+
+function getAllClientTrash() {
+    
+    const query = "select * from client_trash ct join client c on c.id=ct.client_id where c.is_trashed=1";
+    return new Promise((resolve, reject) => {
+        connection.query(query, (err, result) => {
+            if (err) {
+                console.error("ERROR : ", err);
+                return reject(err);
+            }
+            resolve(result);
+        });
+    });
 }
 
 //============================================
