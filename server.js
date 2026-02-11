@@ -499,6 +499,11 @@ function getAllClientTrash() {
 app.get("/getAllClientTrash", async (req, res) => {
     try {
         let result = await getAllClientTrash();
+        result.forEach((ele)=>{ele.deleted_date=new Date(ele.deleted_date).toLocaleString("en-US", {
+            dateStyle: "short",
+            timeStyle: "short"
+          })});
+          
         res.json({"data":result});
     } catch(err) {
         console.error("Error read all client details from trash:", err);
