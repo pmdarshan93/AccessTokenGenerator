@@ -59,7 +59,8 @@ app.get("/getAllProjects", async (req, res) => {
     let { clientId } = req.query;
     try {
         let projectList = await getProjectList(clientId);
-        res.json(projectList);
+        console.log(projectList.length)
+        res.json({"data" : projectList});
     } catch (err) {
         console.log(err);
         res.sendStatus(500)
@@ -259,13 +260,17 @@ app.get("/allLog",async (req,res)=>{
         res.json({"data": log})
     }catch(err){
         console.log(err)
-        reject(500)
+        res.sendStatus(500)
     }
 })
-
 app.get("/getAllClientTrash", async (req, res) => {
     try {
         let result = await getAllClientTrash();
+        result.forEach((e)=>{e.deleted_date=new Date(e.deleted_date).toLocaleString("en-US", {
+            dateStyle: "short",
+            timeStyle: "short"
+          })});
+
         res.json({"data":result});
     } catch(err) {
         console.error("Error read all client details from trash:", err);
@@ -323,15 +328,14 @@ async function checkDuplicateClientId(client_id) {
 }
 
 async function getProjectList(client_id) {
-    console.log(client_id);
-    let query = "select * from project p join token t on p.id=t.project_id  where p.client_id = ? and p.is_trashed=false";
+    let query = "select * from project p join token t on p.project_id=t.project_id where p.client_id = ? and p.is_trashed=false";
     return new Promise((resolve, reject) => {
         connection.query(query, [client_id], (err, result) => {
             if (err) {
                 console.log("GET ALL PROJECT CLIENT ID ERROR\n", err);
                 reject(500);
             }
-            resolve(result[0]);
+            resolve(result);
         })
     })
 }
