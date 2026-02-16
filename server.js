@@ -59,7 +59,11 @@ app.get("/getAllProjects", async (req, res) => {
     let { clientId } = req.query;
     try {
         let projectList = await getProjectList(clientId);
-        console.log(projectList.length)
+        projectList.forEach(ele=>ele.auto_regeneration=(ele.auto_regeneration==1));
+        projectList.forEach((ele)=>{ele.created_time=new Date(+ele.created_time).toLocaleString("en-US", {
+            dateStyle: "short"
+          })});
+        console.log(projectList)
         res.json({"data" : projectList});
     } catch (err) {
         console.log(err);
@@ -103,6 +107,19 @@ app.get('/newProject', async (req, res) => {
     } catch (err) {
         console.log(err)
         res.sendStatus(500);
+    }
+})
+
+app.get('/getClient', async (req,res)=>{
+    let {clientId}= req.query;
+    try{
+        console.log(clientId)
+        let clientDetails = await getClientDetailsFromDB(clientId);
+        console.log([clientDetails])
+        res.json({"data" : [clientDetails]})
+    }catch(err){
+        console.log(err)
+        reject(500)
     }
 })
 
