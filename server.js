@@ -36,6 +36,7 @@ app.get("/", (req, res) => {
 
 app.get("/AllClients", async (req, res) => {
     try {
+        console.log("reqeust")
         let clientList = await getAllClients();
         res.json({"data" :clientList});
     } catch (err) {
@@ -60,9 +61,7 @@ app.get("/getAllProjects", async (req, res) => {
     try {
         let projectList = await getProjectList(clientId);
         projectList.forEach(ele=>ele.auto_regeneration=(ele.auto_regeneration==1));
-        projectList.forEach((ele)=>{ele.created_time=new Date(+ele.created_time).toLocaleString("en-US", {
-            dateStyle: "short"
-          })});
+        projectList.forEach((ele)=>{ele.created_time= changTime(ele.created_time)})
         console.log(projectList)
         res.json({"data" : projectList});
     } catch (err) {
@@ -70,6 +69,11 @@ app.get("/getAllProjects", async (req, res) => {
         res.sendStatus(500)
     }
 })
+
+function changTime(time){
+    let date = new Date(+time);
+    return date.getFullYear()+"-"+date.getMonth()+"-"+date.getDate()
+}
 
 
 app.post("/addProject", async (req, res) => {
@@ -270,10 +274,7 @@ app.post("/editScope",async (req,res)=>{
 app.get("/allLog",async (req,res)=>{
     try{
         let log=await getLogFromDb();
-        log.forEach((ele)=>{ele.time=new Date(ele.time).toLocaleString("en-US", {
-  dateStyle: "short",
-  timeStyle: "short"
-})});
+        log.forEach((ele)=>{ele.time=changTime(ele.time)})
         res.json({"data": log})
     }catch(err){
         console.log(err)
