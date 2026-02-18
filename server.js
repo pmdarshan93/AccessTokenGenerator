@@ -46,15 +46,43 @@ app.post("/addClient", async (req, res) => {
     }
 })
 
-app.get("/getAllProjects", async (req, res) => {
-    let { client_id } = req.query;
+async function getLogFromDb(){
+    let query= "select * from log";
+    return new Promise((resolve,reject)=>{
+        connection.query(query,(err,result)=>{
+            if(err){
+                console.log("GET LOG FROM DB ERROR",err)
+                reject(500);
+            }
+            resolve(result)
+        })
+        
+    })
+}
+
+app.get("/allLog",async (req,res)=>{
     try{
-    let projectList = await getProjectList(client_id);
-    res.json(projectList);
+        let log=await getLogFromDb();
+        log.forEach((ele)=>{ele.time=new Date(ele.time).toLocaleString("en-US", {
+  dateStyle: "short",
+  timeStyle: "short"
+})});
+        res.json({"data": log})
     }catch(err){
-        res.sendStatus(err)
+        console.log(err)
+        res.sendStatus(500)
     }
 })
+
+// app.get("/getAllProjects", async (req, res) => {
+//     let { client_id } = req.query;
+//     try{
+//     let projectList = await getProjectList(client_id);
+//     res.json(projectList);
+//     }catch(err){
+//         res.sendStatus(err)
+//     }
+// })
 
 
 app.post("/addProject", async (req, res) => {
@@ -188,7 +216,7 @@ app.post("/storeData",async (req,res)=>{
 // ========================== DB
 
 async function getAllClients() {
-    let query = "select * from client";
+    let query = "select * from client where is_trashed=false";
     return new Promise((resolve, reject) => {
         connection.query(query, (err, result) => {
             if (err) {
@@ -484,7 +512,6 @@ return object;
 
 
 function getAllClientTrash() {
-    
     const query = "select * from client_trash ct join client c on c.id=ct.client_id where c.is_trashed=1";
     return new Promise((resolve, reject) => {
         connection.query(query, (err, result) => {
@@ -492,6 +519,7 @@ function getAllClientTrash() {
                 console.error("ERROR : ", err);
                 return reject(err);
             }
+            console.log("all deleted clients get!")
             resolve(result);
         });
     });
@@ -499,11 +527,11 @@ function getAllClientTrash() {
 app.get("/getAllClientTrash", async (req, res) => {
     try {
         let result = await getAllClientTrash();
-        result.forEach((ele)=>{ele.deleted_date=new Date(ele.deleted_date).toLocaleString("en-US", {
+        result.forEach((e)=>{e.deleted_date=new Date(e.deleted_date).toLocaleString("en-US", {
             dateStyle: "short",
             timeStyle: "short"
           })});
-          
+
         res.json({"data":result});
     } catch(err) {
         console.error("Error read all client details from trash:", err);
@@ -538,7 +566,7 @@ app.get("/getAllProjectTrash", async (req, res) => {
 
 function clearProjectTrash(client_id) {
     const query = "delete p, pt from project p join project_trash pt ON pt.project_id = p.project_id WHERE p.client_id = ? and p.is_trashed = 1"; 
-
+    
     return new Promise((resolve, reject) => {
         connection.beginTransaction(err => {
             if (err) {
@@ -566,7 +594,7 @@ function clearProjectTrash(client_id) {
 }
 
 
-app.delete("/clearProjectTrash", async (req, res) => {
+app.get("/clearProjectTrash", async (req, res) => {
     const {id} = req.query;
     try {
         let result = await clearProjectTrash(id);
@@ -643,7 +671,9 @@ function clearClientTrash() {
     });
 }
 
-app.delete("/clearClientTrash", async (req, res) => {
+app.post("/clearClientTrash", async (req, res) => {
+    console.log("Cleared!!")
+    console.log(req.body)
     try {
         const result = await clearClientTrash();
         console.log(result)
@@ -743,10 +773,13 @@ function permanentlyDeleteClient(client_id){
     });
 }
 
-app.delete("/permanentlyDeleteClient", async (req, res) => {
-    const {client_id} = req.query;
+app.post("/permanentlyDeleteClient", async (req, res) => {
+    const {id} = req.body;
+    console.log("==========")
+    console.log(req.body)
+
     try {
-        const result = await permanentlyDeleteClient(client_id);
+        const result = await permanentlyDeleteClient(id);
         console.log(result)
         res.json({ 
             message: "Client premnanely deleted", 
@@ -754,4 +787,184 @@ app.delete("/permanentlyDeleteClient", async (req, res) => {
     } catch (err) {
         res.sendStatus(500);
     }
+})
+
+app.get("/last_week_activity", async (req, res) => {
+    try {
+        const result = await getLastWeekActivity();
+        res.json({"data":result});
+    } catch (err) {
+        console.error(err);
+        res.sendStatus(500);
+    }
 });
+
+function getLastWeekActivity() {
+    return new Promise((resolve, reject) => {
+        const query = "select action, time from log where time >= date_sub(curdate(), interval weekday(curdate()) + 7 day) and time < date_sub(curdate(), interval weekday(curdate()) day)";
+        connection.query(query, (err, result) => {
+            if (err) {
+                console.error("DB error:", err);
+                return reject(500);
+            }
+
+            const days = ["Monday","Tuesday","Wednesday","Thursday","Friday","Saturday","Sunday"];
+            const activityPercent = days.map(day => ({
+                day,
+                created: "0",
+                deleted: "0",
+                regenerated: "0"
+            }));
+
+            const counts = {};
+            days.forEach(day => counts[day] = { created: 0, deleted: 0, regenerated: 0, total: 0 });
+
+            result.forEach(row => {
+                const date = new Date(row.time);
+                const dayName = date.toLocaleString("en-US", { weekday: "long" });
+
+                if(row.action == "create") counts[dayName].created++;
+                if(row.action == "delete") counts[dayName].deleted++;
+                if (row.action == "regenerate") counts[dayName].regenerated++;
+                counts[dayName].total++;
+            });
+
+            activityPercent.forEach(dayObj => {
+                const dayCounts = counts[dayObj.day];
+                if (dayCounts.total > 0) {
+                    dayObj.created = ((dayCounts.created / dayCounts.total) * 100).toFixed(2);
+                    dayObj.deleted = ((dayCounts.deleted / dayCounts.total) * 100).toFixed(2);
+                    dayObj.regenerated = ((dayCounts.regenerated / dayCounts.total) * 100).toFixed(2);
+                }
+            });
+            console.log(activityPercent)
+            resolve(activityPercent);
+        });
+    });
+}
+
+
+async function restoreClient(trashId) {
+    let query = "select client_id from client_trash where client_id = ?";
+    let restoreQuery = "update client set is_trashed= false where id = ?";
+    let deleteTrash = "delete from client_trash where client_id = ?";
+    return new Promise((resolve, reject) => {
+        connection.beginTransaction((err) => {
+            if (err) {
+                console.log("RESTORE CLIENT TRANSACTION ERROR \n", err);
+                reject(500);
+            }
+            connection.query(query, trashId, (err, result) => {
+                if (err) {
+                    console.log("RESTORE CLIENT GET CLIENT ID ERR", err);
+                    return connection.rollback(() => reject(500));
+                }
+                console.log(result)
+                let clientDetails=result[0]
+                console.log(clientDetails)
+                connection.query(restoreQuery, [clientDetails.client_id], (errr, result2) => {
+                    if (errr) {
+                        console.log("RESTORE CLIENT ERROR\n", errr);
+                        return connection.rollback(() => reject(500));
+                    }
+                    connection.query(deleteTrash, [trashId], (errrr, result3) => {
+                        if (errrr) {
+                            console.log("DELETE FROM TRASH", errrr);
+                            return connection.rollback(() => reject(500));
+                        }
+                        if (result3.affectedRows === 1) {
+                            connection.commit((err) => {
+                                if (err) {
+                                    connection.rollback(() => reject(500));
+                                }
+                                resolve(true);
+                            })
+                        }
+                    })
+                })
+            })
+        })
+    })
+}
+
+
+async function restoreProject(trashId) {
+    let query = "select project_id from project_trash where trash_id = ?";
+    let restoreQuery = "update project set is_trashed= false where project_id = ?";
+    let deleteTrash = "delete from project_trash where trash_id = ?";
+    return new Promise((resolve, reject) => {
+        connection.beginTransaction((err) => {
+            if (err) {
+                console.log("RESTORE PROJECT TRANSACTION ERROR\n", err)
+                reject(500);
+            }
+            connection.query(query, [trashId], (err, result) => {
+                if (err) {
+                    console.log("GET PROJECT iD ERROR\n", err);
+                    return connection.rollback(() => reject(500))
+                }
+                let projectDetails=result[0]
+                connection.query(restoreQuery, [projectDetails.project_id], (err2, result2) => {
+                    if (err2) {
+                        console.log("UPDATE PROJECT IS TRASHED ERR\n", err2);
+                        return connection.rollback(() => reject(500));
+                    }
+                    if (result2.affectedRows === 1) {
+                        connection.query(deleteTrash,[trashId],(err3,result3)=>{
+                            if(err3){
+                                console.log("DELETE PROJECT TRASH ERROR",err3);
+                                connection.rollback(()=>{reject(500)})
+                            }
+                            if(result3.affectedRows==1){
+                                connection.commit((err4) => {
+                                    if (err4) {
+                                        console.log("UPDATE PROJECT COMMIT ERROR", err);
+                                        return connection.rollback(() => reject(500))
+                                    }
+                                    resolve(result[0]);
+                                })
+                            }
+                        })
+                    } else {
+                        return connection.rollback(() => reject(500));
+                    }
+                })
+            })
+        })
+    })
+}
+
+app.post("/restoreClient", async (req, res) => {
+    console.log("======>came inside restoreClient")
+    let { id } = req.body;
+    try {
+        let restoreStatus = await restoreClient(id);
+        if (restoreStatus) {
+            return res.sendStatus(200);
+        }
+        res.sendStatus(404);
+    } catch (err) {
+        console.log(err);
+        res.sendStatus(500);
+    }
+})
+
+app.post("/restoreProject", async (req, res) => {
+    let { trashId } = req.body;
+    try {
+        let projectId = await restoreProject(trashId);
+        if (projectId) {
+            let project = await getProjectDetailsFromDb(projectId);
+            let clientDetails = await getClientDetailsFromDB(project.client_id);
+            return res.json({
+                clientId: clientDetails.client_id,
+                scope : project.scope,
+                "projectId" : project.project_id
+            });
+        }
+        res.sendStatus(404);
+    } catch (err) {
+        console.log(err);
+        res.sendStatus(500);
+    }
+})
