@@ -104,10 +104,10 @@ app.post("/addProject", async (req, res) => {
 app.get('/newProject', async (req, res) => {
     let code = req.query.code;
     let state = req.query.state;
-    let clientId=JSON.parse(state).clientId
+    // let clientId=JSON.parse(state).clientId
     // console.log(JSON.parse(state).clientId)
     try {
-        let clientDetails = await getClientDetailsFromDB(clientId);
+        let clientDetails = await getClientDetailsFromDB(1);
         let tokens = await genrateTokens(code, clientDetails.client_id, clientDetails.client_secret);
         console.log(tokens);
         let projectId = await getLastProjectId();
@@ -749,39 +749,237 @@ function getAllClientTrash() {
 }
 
 //============================================
+function permanentlyDeleteClient(client_id){
+    return new Promise((resolve, reject) => {
+        const del_client_trash = "delete from client_trash where client_id=?";
+        const del_client = "delete from client where id=? and  is_trashed=1";
+        const del_project = "delete p,pt from project p join project_trash pt on p.project_id=pt.project_id where p.client_id=?"
+        connection.query(del_client_trash, [client_id],(err, result) => {
+            if(err){
+                console.log("DELETE CLIENT TRANSACTION ERROR\n", err)
+                reject(500);
+            }
+            connection.query(del_client, [client_id],(err, result) => {
+                if(err){
+                    console.log(err)
+                    return connection.rollback(() => reject(500))
+                }
+                else if(result){
+                    connection.query(del_project, [client_id],(err, result) => {
+                        if(err){
+                            console.log(err)
+                            return connection.rollback(() => reject(500))
+                        }
+                        if(result){
+                            connection.commit((err) => {
+                                if (err) {
+                                    console.log(err);
+                                    return connection.rollback(() => reject(500))
+                                }
+                                resolve(true);
+                            })
+                        }
 
-async function genrateTokens(grandToken, clientId, clientSecret) {
-    let response = await fetch("https://accounts.zoho.in/oauth/v2/token", {
-        method: "POST",
-        headers: {
-            "Content-Type": "application/x-www-form-urlencoded"
-        },
-        body: queryString.stringify({
-            client_id: clientId,
-            client_secret: clientSecret,
-            grant_type: "authorization_code",
-            code: grandToken,
-            redirect_uri: "http://localhost:2507/newProject"
+                    })
+                }
+                
+            });
+            
         })
-    })
-    let object = await response.json();
-    return object;
+    });
 }
 
-async function regenerateToken(clientId, clientSecret, refreshToken) {
-    let response = await fetch("https://accounts.zoho.in/oauth/v2/token", {
-        method: "POST",
-        headers: {
-            "Content-Type": "application/x-www-form-urlencoded"
-        },
-        body: queryString.stringify({
-            client_id: clientId,
-            client_secret: clientSecret,
-            grant_type: "refresh_token",
-            refresh_token: refreshToken
+app.post("/permanentlyDeleteClient", async (req, res) => {
+    const {id} = req.body;
+    console.log("==========")
+    console.log(req.body)
+
+    try {
+        const result = await permanentlyDeleteClient(id);
+        console.log(result)
+        res.json({ 
+            message: "Client premnanely deleted", 
+        });
+    } catch (err) {
+        res.sendStatus(500);
+    }
+})
+async function restoreClient(trashId) {
+    let query = "select client_id from client_trash where client_id = ?";
+    let restoreQuery = "update client set is_trashed= false where id = ?";
+    let deleteTrash = "delete from client_trash where client_id = ?";
+    return new Promise((resolve, reject) => {
+        connection.beginTransaction((err) => {
+            if (err) {
+                console.log("RESTORE CLIENT TRANSACTION ERROR \n", err);
+                reject(500);
+            }
+            connection.query(query, trashId, (err, result) => {
+                if (err) {
+                    console.log("RESTORE CLIENT GET CLIENT ID ERR", err);
+                    return connection.rollback(() => reject(500));
+                }
+                console.log(result)
+                let clientDetails=result[0]
+                console.log(clientDetails)
+                connection.query(restoreQuery, [clientDetails.client_id], (errr, result2) => {
+                    if (errr) {
+                        console.log("RESTORE CLIENT ERROR\n", errr);
+                        return connection.rollback(() => reject(500));
+                    }
+                    connection.query(deleteTrash, [trashId], (errrr, result3) => {
+                        if (errrr) {
+                            console.log("DELETE FROM TRASH", errrr);
+                            return connection.rollback(() => reject(500));
+                        }
+                        if (result3.affectedRows === 1) {
+                            connection.commit((err) => {
+                                if (err) {
+                                    connection.rollback(() => reject(500));
+                                }
+                                resolve(true);
+                            })
+                        }
+                    })
+                })
+            })
         })
     })
-    let newToken = await response.json();
-    console.log(newToken)
-    return newToken.access_token;
 }
+
+
+async function restoreProject(trashId) {
+    let query = "select project_id from project_trash where trash_id = ?";
+    let restoreQuery = "update project set is_trashed= false where project_id = ?";
+    let deleteTrash = "delete from project_trash where trash_id = ?";
+    return new Promise((resolve, reject) => {
+        connection.beginTransaction((err) => {
+            if (err) {
+                console.log("RESTORE PROJECT TRANSACTION ERROR\n", err)
+                reject(500);
+            }
+            connection.query(query, [trashId], (err, result) => {
+                if (err) {
+                    console.log("GET PROJECT iD ERROR\n", err);
+                    return connection.rollback(() => reject(500))
+                }
+                let projectDetails=result[0]
+                connection.query(restoreQuery, [projectDetails.project_id], (err2, result2) => {
+                    if (err2) {
+                        console.log("UPDATE PROJECT IS TRASHED ERR\n", err2);
+                        return connection.rollback(() => reject(500));
+                    }
+                    if (result2.affectedRows === 1) {
+                        connection.query(deleteTrash,[trashId],(err3,result3)=>{
+                            if(err3){
+                                console.log("DELETE PROJECT TRASH ERROR",err3);
+                                connection.rollback(()=>{reject(500)})
+                            }
+                            if(result3.affectedRows==1){
+                                connection.commit((err4) => {
+                                    if (err4) {
+                                        console.log("UPDATE PROJECT COMMIT ERROR", err);
+                                        return connection.rollback(() => reject(500))
+                                    }
+                                    resolve(result[0]);
+                                })
+                            }
+                        })
+                    } else {
+                        return connection.rollback(() => reject(500));
+                    }
+                })
+            })
+        })
+    })
+}
+
+app.post("/restoreClient", async (req, res) => {
+    console.log("======>came inside restoreClient")
+    let { id } = req.body;
+    try {
+        let restoreStatus = await restoreClient(id);
+        if (restoreStatus) {
+            return res.sendStatus(200);
+        }
+        res.sendStatus(404);
+    } catch (err) {
+        console.log(err);
+        res.sendStatus(500);
+    }
+})
+
+app.post("/restoreProject", async (req, res) => {
+    let { trashId } = req.body;
+    try {
+        let projectId = await restoreProject(trashId);
+        if (projectId) {
+            let project = await getProjectDetailsFromDb(projectId);
+            let clientDetails = await getClientDetailsFromDB(project.client_id);
+            return res.json({
+                clientId: clientDetails.client_id,
+                scope : project.scope,
+                "projectId" : project.project_id
+            });
+        }
+        res.sendStatus(404);
+    } catch (err) {
+        console.log(err);
+        res.sendStatus(500);
+    }
+})
+function clearClientTrash() {
+    return new Promise((resolve, reject) => {
+        // const deleteProjectTrash = "delete from project_trash";
+        // const deleteProjects = "delete p,pt from project p join project_trash pt on p.project_id=pt.project_id where p.is_trashed = 1 ";
+        const deleteClientTrash = "delete from client_trash";
+        const deleteClients = "delete from client where is_trashed = 1";
+
+        connection.beginTransaction(err => {
+            if (err) {
+                console.error("BEGIN TRANSACTION ERROR", err);
+                return reject(500);
+            }
+
+            connection.query(deleteClients, (err, result) => {
+                if (err) {
+                    console.error("CLIENT DELETE ERROR", err);
+                    return connection.rollback(() => reject(500));
+                }
+
+
+                connection.query(deleteClientTrash, (err, result) => {
+                    if (err) {
+                        console.error("CLIENT TRASH DELETE ERROR", err);
+                        return connection.rollback(() => reject(500));
+                    }
+
+                    connection.commit(commitErr => {
+                        if (commitErr) {
+                            console.error("COMMIT ERROR", commitErr);
+                            return connection.rollback(() => reject(500));
+                        }
+
+                        resolve(true);
+                    })
+              
+                });
+            });
+        });
+    });
+}
+
+app.post("/clearClientTrash", async (req, res) => {
+    console.log("Cleared!!")
+    console.log(req.body)
+    try {
+        const result = await clearClientTrash();
+        console.log(result)
+        res.json({ 
+            message: "Client trash cleared", 
+            deletedRows: result.affectedRows
+        });
+    } catch (err) {
+        res.sendStatus(500);
+    }
+});
