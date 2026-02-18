@@ -36,7 +36,6 @@ app.get("/", (req, res) => {
 
 app.get("/AllClients", async (req, res) => {
     try {
-        console.log("reqeust")
         let clientList = await getAllClients();
         res.json({"data" :clientList});
     } catch (err) {
@@ -60,9 +59,13 @@ app.get("/getAllProjects", async (req, res) => {
     let { clientId } = req.query;
     try {
         let projectList = await getProjectList(clientId);
-        projectList.forEach(ele=>ele.auto_regeneration=(ele.auto_regeneration==1));
-        projectList.forEach((ele)=>{ele.created_time= changTime(ele.created_time)})
-        console.log(projectList)
+        // console.log(projectList)
+        for(let project of projectList){
+            project.is_valid = (+project.created_time+3600000 )>new Date().getTime();
+            project.auto_regeneration=(project.auto_regeneration==1);
+            project.created_time= changeTime(project.created_time);
+            project.scopes=project.scopes.split(",");
+        }
         res.json({"data" : projectList});
     } catch (err) {
         console.log(err);
@@ -70,9 +73,11 @@ app.get("/getAllProjects", async (req, res) => {
     }
 })
 
-function changTime(time){
-    let date = new Date(+time);
-    return date.getFullYear()+"-"+date.getMonth()+"-"+date.getDate()
+function changeTime(time){
+    return new Date(+time).toLocaleString("en-US", {
+        dateStyle: "short",
+        timeStyle: "short"
+      }).toString();
 }
 
 
@@ -83,13 +88,13 @@ app.post("/addProject", async (req, res) => {
         if (uniqueStatus) {
             let insertId = await createProjectInDb(name, description, scope, clientId, autoRegeneration);
             if (insertId) {
-                let clientDetails = await getClientDetailsFromDB(clientId);
-                let client_id = clientDetails.client_id
-                return res.json({ client_id, insertId });
+                // let clientDetails = await getClientDetailsFromDB(clientId);
+                // let client_id = clientDetails.client_id
+                return res.json({"data" : [{"projectId" : insertId} ]});
             }
-            res.sendStatus(404);
+            return res.sendStatus(404);
         }
-        res.sendStatus(409);
+       return  res.sendStatus(409);
     } catch (err) {
         console.log(err);
         res.sendStatus(500);
@@ -98,14 +103,18 @@ app.post("/addProject", async (req, res) => {
 
 app.get('/newProject', async (req, res) => {
     let code = req.query.code;
-    console.log(code);
+    let state = req.query.state;
+    let clientId=JSON.parse(state).clientId
+    // console.log(JSON.parse(state).clientId)
     try {
-        let clientDetails = await getClientDetailsFromDB(1);
+        let clientDetails = await getClientDetailsFromDB(clientId);
         let tokens = await genrateTokens(code, clientDetails.client_id, clientDetails.client_secret);
         console.log(tokens);
-        let createStatus = await createTokenInDB(tokens, 1);
+        let projectId = await getLastProjectId();
+        console.log(projectId-1)
+        let createStatus = await createTokenInDB(tokens, projectId-1);
         if (createStatus) {
-            return res.sendStatus(200)
+            return res.redirect("https://pali-client.csez.zohocorpin.com:8000")
         }
         res.sendStatus(404);
     } catch (err) {
@@ -117,9 +126,7 @@ app.get('/newProject', async (req, res) => {
 app.get('/getClient', async (req,res)=>{
     let {clientId}= req.query;
     try{
-        console.log(clientId)
         let clientDetails = await getClientDetailsFromDB(clientId);
-        console.log([clientDetails])
         res.json({"data" : [clientDetails]})
     }catch(err){
         console.log(err)
@@ -166,9 +173,7 @@ app.get("/getProjectsOfClient", async (req, res) => {
 app.get("/getProject",async (req,res)=>{
     let {projectId} =req.query
     try{
-        console.log(projectId)
         let project= await getProjectDetailsFromDb(projectId)
-        console.log(project)
         res.json(project);
     }catch(err){
         console.log(err);
@@ -274,7 +279,7 @@ app.post("/editScope",async (req,res)=>{
 app.get("/allLog",async (req,res)=>{
     try{
         let log=await getLogFromDb();
-        log.forEach((ele)=>{ele.time=changTime(ele.time)})
+        log.forEach((ele)=>{ele.time=changeTime(ele.time)})
         res.json({"data": log})
     }catch(err){
         console.log(err)
@@ -378,6 +383,7 @@ async function createProjectInDb(name, description, scope, clientId, autoRegener
                 console.log(" CREATE PROJECT IN Db ERROR", err);
                 reject(500);
             }
+            console.log(result.insertId)
             resolve(result.insertId);
         })
     })
@@ -397,30 +403,34 @@ async function getClientDetailsFromDB(clientId) {
 }
 
 async function createTokenInDB(token, projectId) {
-    let alreadyExist="select * from project where project_id = ?";
+    let alreadyExist="select * from token where project_id = ?";
     let query = "insert into token (access_token,refresh_token,created_time,project_id) values (?,?,?,?)";
-    let update = "update token set access_token = ?,refresh_token = ?,created_time =?";
+    let update = "update token set access_token = ?,refresh_token = ?,created_time =? where project_id = ?";
+    console.log(token, projectId)
     return new Promise((resolve, reject) => {
         connection.query(alreadyExist,[projectId],(err,result)=>{
         if(err){
             console.log("CREATE TOKEN DUPLICATE CHECK ERROR",err)
             reject(500);
         }
+        // console.log(result)
         if(result.length==0){
-            connection.query(query, [token.access_token, token.refresh_token, new Date().getTime(), projectId], (err, result) => {
+            connection.query(query, [token.access_token, token.refresh_token, `${new Date().getTime()}`, projectId], (err, result) => {
                 if (err) {
-                    console.log("CREATE TOKEN IN DB ERROR \n", err);
+                    console.log("CREATE TOKE1000.831bccc8fb4276a6905ef01dfbeb7e94.ec858396ea1033df11dd1d3c9e10522N IN DB ERROR \n", err);
                     reject(500)
                 }
+                // console.log(result)
                 resolve(result.affectedRows == 1);
             })
         }else{
-            connection.query(update,[token.access_token,token.refresh_token,new Date().getTime()],(err,result)=>{
+            connection.query(update,[token.access_token,token.refresh_token,new Date().getTime(),projectId],(err,result)=>{
                 if(err){
                     console.log("UPDATE TOKEN CREATE TOKEN ERR\n",err);
                     reject(500);
                 }
-                resolve(result.affectedRows>1);
+                // console.log(result)
+                resolve(result.affectedRows>0);
             })
         }
         })
@@ -568,7 +578,7 @@ async function getTokenFromDb(projectId) {
 }
 
 async function getProjectDetailsFromDb(projectId) {
-    let query = "select * from project where project_id = ? and is_trashed = false";
+    let query = "select * from project p join token t on p.project_id = t.token_id where p.project_id = ?";
     return new Promise((resolve, reject) => {
         connection.query(query, [projectId], (err, result) => {
             if (err) {
@@ -707,6 +717,21 @@ async function getLogFromDb(){
         
     })
 }
+
+async function getLastProjectId(){
+    let query = `select auto_increment as id from information_schema.tables where table_schema = "ATG" and table_name = "project"`
+    return new Promise((resolve, reject)=>{
+        connection.query(query,(err,result)=>{
+            if(err){
+                console.log("GET LAST PROJECT ID ERROR, ", err)
+                return reject(500)
+            }
+            console.log(result[0].id)
+            resolve(result[0].id)
+        })
+    })
+}
+// getLastProjectId()
 
 
 function getAllClientTrash() {
