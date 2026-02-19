@@ -5,6 +5,7 @@ const port = 2507;
 const cors =require('cors');
 const clipboardy = require('clipboardy');
 const copyPaste = require('copy-paste');
+let insertId=0;
 
 
 const queryString = require('querystring')
@@ -64,7 +65,7 @@ app.get("/getAllProjects", async (req, res) => {
             project.is_valid = (+project.created_time+3600000 )>new Date().getTime();
             project.auto_regeneration=(project.auto_regeneration==1);
             project.created_time= changeTime(project.created_time);
-            project.scopes=project.scopes.split(",");
+            project.scope_list=project.scopes?project.scopes.split(",") :[];
         }
         res.json({"data" : projectList});
     } catch (err) {
@@ -86,11 +87,12 @@ app.post("/addProject", async (req, res) => {
     try {
         let uniqueStatus = await checkDuplicateProject(name);
         if (uniqueStatus) {
-            let insertId = await createProjectInDb(name, description, scope, clientId, autoRegeneration);
-            if (insertId) {
-                // let clientDetails = await getClientDetailsFromDB(clientId);
-                // let client_id = clientDetails.client_id
-                return res.json({"data" : [{"projectId" : insertId} ]});
+            let id = await createProjectInDb(name, description, scope, clientId, autoRegeneration);
+            if (id) {
+                let clientDetails = await getClientDetailsFromDB(clientId);
+                let client_id = clientDetails.client_id
+                insertId =id
+                return res.json({"project_id" : insertId});
             }
             return res.sendStatus(404);
         }
@@ -104,15 +106,15 @@ app.post("/addProject", async (req, res) => {
 app.get('/newProject', async (req, res) => {
     let code = req.query.code;
     let state = req.query.state;
-    // let clientId=JSON.parse(state).clientId
-    // console.log(JSON.parse(state).clientId)
+    console.log(state)
+    let clientId=JSON.parse(state).clientId
+    let projectId=JSON.parse(state).projectId
+    console.log(JSON.parse(state).clientId)
     try {
-        let clientDetails = await getClientDetailsFromDB(1);
+        let clientDetails = await getClientDetailsFromDB(clientId);
         let tokens = await genrateTokens(code, clientDetails.client_id, clientDetails.client_secret);
         console.log(tokens);
-        let projectId = await getLastProjectId();
-        console.log(projectId-1)
-        let createStatus = await createTokenInDB(tokens, projectId-1);
+        let createStatus = await createTokenInDB(tokens,projectId==0?insertId:projectId);
         if (createStatus) {
             return res.redirect("https://pali-client.csez.zohocorpin.com:8000")
         }
@@ -173,8 +175,10 @@ app.get("/getProjectsOfClient", async (req, res) => {
 app.get("/getProject",async (req,res)=>{
     let {projectId} =req.query
     try{
+        console.log(projectId+",")
         let project= await getProjectDetailsFromDb(projectId)
-        res.json(project);
+        project.created_time = changeTime(project.created_time)
+        res.json({"data" : [project]});
     }catch(err){
         console.log(err);
         res.sendStatus(500)
@@ -182,11 +186,14 @@ app.get("/getProject",async (req,res)=>{
 })
 
 app.post("/editProject", async (req, res) => {
-    let { name, description, auto_regeneration, project_id } = req.body;
+    let { name, description, auto_regeneration,scopes, project_id } = req.body;
     try {
-        let editStatus = updateProjectInDb(name, description, auto_regeneration, project_id);
+        let projectDetails = await getProjectDetailsFromDb(project_id);
+        let editStatus = updateProjectInDb(name, description, scopes,auto_regeneration, project_id);
         if (editStatus) {
-            return res.sendStatus(200)
+            return res.json({"is_scope_changed": projectDetails.scopes==scopes})
+            // return res.json({"is_scope_changed": projectDetails.scopes===scopes?[projectDetails.scopes==scopes]:null})
+
         }
         res.sendStatus(404)
     } catch (err) {
@@ -194,6 +201,21 @@ app.post("/editProject", async (req, res) => {
         res.sendStatus(500);
     }
 })
+
+// app.post("/editScope",async (req,res)=>{
+//     let {projectId,scope} = req.body;
+//     try{
+//         let updateStatus = await updateScopeInDb(projectId,scope); 
+//         if(updateStatus){
+//         let projectDetails= await getProjectDetailsFromDb(projectId);
+//         let clientDetails = await getClientDetailsFromDB(projectDetails.client_id);
+//         res.json(clientDetails.client_id);
+//         }
+//     }catch(err){
+//         console.log(err);
+//         reject(500);
+//     }
+// })
 
 app.post("/deleteProject", async (req, res) => {
     let { project_id, reason } = req.body;
@@ -213,9 +235,12 @@ app.post("/regenerateToken", async (req, res) => {
     let { projectId } = req.body;
     try {
         let tokens = await getTokenFromDb(projectId);
+        // console.log(tokens)
         let project = await getProjectDetailsFromDb(projectId);
+        // console.log(project)
         let client = await getClientDetailsFromDB(project.client_id);
-        let newAccessToken = await regenerateToken(client.client_id, client.client_secret, tokens.refreshToken);
+        // console.log(client)
+        let newAccessToken = await regenerateToken(client.client_id, client.client_secret, tokens.refresh_token);
         let updateStatus = await updateAccessToken(tokens.token_id, newAccessToken);
         if (updateStatus) {
             return res.json(newAccessToken);
@@ -261,20 +286,7 @@ app.post("/restoreProject", async (req, res) => {
     }
 })
 
-app.post("/editScope",async (req,res)=>{
-    let {projectId,scope} = req.body;
-    try{
-        let updateStatus = await updateScopeInDb(projectId,scope); 
-        if(updateStatus){
-        let projectDetails= await getProjectDetailsFromDb(projectId);
-        let clientDetails = await getClientDetailsFromDB(projectDetails.client_id);
-        res.json(clientDetails.client_id);
-        }
-    }catch(err){
-        console.log(err);
-        reject(500);
-    }
-})
+
 
 app.get("/allLog",async (req,res)=>{
     try{
@@ -403,6 +415,7 @@ async function getClientDetailsFromDB(clientId) {
 }
 
 async function createTokenInDB(token, projectId) {
+    console.log("aaaaaaaaaaaa",token,projectId)
     let alreadyExist="select * from token where project_id = ?";
     let query = "insert into token (access_token,refresh_token,created_time,project_id) values (?,?,?,?)";
     let update = "update token set access_token = ?,refresh_token = ?,created_time =? where project_id = ?";
@@ -413,11 +426,11 @@ async function createTokenInDB(token, projectId) {
             console.log("CREATE TOKEN DUPLICATE CHECK ERROR",err)
             reject(500);
         }
-        // console.log(result)
+        console.log(result)
         if(result.length==0){
             connection.query(query, [token.access_token, token.refresh_token, `${new Date().getTime()}`, projectId], (err, result) => {
                 if (err) {
-                    console.log("CREATE TOKE1000.831bccc8fb4276a6905ef01dfbeb7e94.ec858396ea1033df11dd1d3c9e10522N IN DB ERROR \n", err);
+                    console.log("CREATE TOKEN IN DB ERROR \n", err);
                     reject(500)
                 }
                 // console.log(result)
@@ -505,10 +518,10 @@ async function getProjectOfClient(clientId) {
     })
 }
 
-async function updateProjectInDb(name, description, auto_regeneration, project_id) {
-    let query = "update project set name=? , description = ?,auto_regeneration=? where project_id = ?";
+async function updateProjectInDb(name, description, scope,auto_regeneration, project_id) {
+    let query = "update project set name=? , description = ?,auto_regeneration=? ,scopes = ? where project_id = ?";
     return new Promise((resolve, reject) => {
-        connection.query(query, [name, description, auto_regeneration, project_id], (err, result) => {
+        connection.query(query, [name, description, auto_regeneration, scope, project_id], (err, result) => {
             if (err) {
                 console.log("UPDATE PROJECT IN DB ERROR", err);
                 reject(500);
@@ -517,6 +530,19 @@ async function updateProjectInDb(name, description, auto_regeneration, project_i
         })
     })
 }
+
+// async function updateScopeInDb(projectId,scope){
+//     let query="update project set scopes= ? where project_id =?";
+//     return new Promise((resolve,reject)=>{
+//         connection.query(query,[scope,projectId],(err,result)=>{
+//             if(err){
+//                 console.log("UPDATE SCOPE IN DB ERR\n",err);
+//                 reject(500);
+//             }
+//             resolve(result.affectedRows===1);
+//         })
+//     })
+// }
 
 async function deleteProject(projectId, reason) {
     let query = "update project set is_trashed=true where project_id = ?";
@@ -566,7 +592,7 @@ async function deleteProject(projectId, reason) {
 }
 
 async function getTokenFromDb(projectId) {
-    let query = "select * from token where project_id = ? and is_trashed = false";
+    let query = "select * from token t join project p on t.project_id = p.project_id where p.is_trashed=false and p.project_id = ?";
     return new Promise((resolve, reject) => {
         connection.query(query, [projectId], (err, result) => {
             if (err) {
@@ -578,22 +604,23 @@ async function getTokenFromDb(projectId) {
 }
 
 async function getProjectDetailsFromDb(projectId) {
-    let query = "select * from project p join token t on p.project_id = t.token_id where p.project_id = ?";
+    let query = "select * from project p join token t on p.project_id = t.project_id where p.project_id = ?";
     return new Promise((resolve, reject) => {
         connection.query(query, [projectId], (err, result) => {
             if (err) {
                 console.log("GET PROJECT DETAILS ERR\n", err)
                 reject(500);
             }
+            // console.log("aaaaaaaaaaaa",result)
             resolve(result[0]);
         })
     })
 }
 
 async function updateAccessToken(tokenId, accessToken) {
-    let query = "update tokens set access_token = ? where token_id = ?";
+    let query = "update token set access_token = ?, created_time = ? where token_id = ?";
     return new Promise((resolve, reject) => {
-        connection.query(query, [accessToken, tokenId], (err, result) => {
+        connection.query(query, [accessToken, new Date().getTime(), tokenId], (err, result) => {
             if (err) {
                 console.log("UPDATE ACCESS TOKEN ERROR", err)
                 reject(500)
@@ -691,18 +718,7 @@ async function restoreProject(trashId) {
     })
 }
 
-async function updateScopeInDb(projectId,scope){
-    let query="update project set scopes= ? where project_id =?";
-    return new Promise((resolve,reject)=>{
-        connection.query(query,[scope,projectId],(err,result)=>{
-            if(err){
-                console.log("UPDATE SCOPE IN DB ERR\n",err);
-                reject(500);
-            }
-            resolve(result.affectedRows===1);
-        })
-    })
-}
+
 
 async function getLogFromDb(){
     let query= "select * from log";
@@ -747,6 +763,48 @@ function getAllClientTrash() {
         });
     });
 }
+
+// ============================================
+
+async function genrateTokens(grandToken, clientId, clientSecret) {
+    console.log(grandToken,clientId,clientSecret)
+    let response = await fetch("https://accounts.zoho.in/oauth/v2/token", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/x-www-form-urlencoded"
+        },
+        body: queryString.stringify({
+            client_id: clientId,
+            client_secret: clientSecret,
+            grant_type: "authorization_code",
+            code: grandToken,
+            redirect_uri: "http://localhost:2507/newProject"
+        })
+    })
+    let object = await response.json();
+    return object;
+}
+
+async function regenerateToken(clientId, clientSecret, refreshToken) {
+    console.log(clientId, clientSecret, refreshToken)
+    let response = await fetch("https://accounts.zoho.in/oauth/v2/token", {
+        method: "POST",
+        headers: {
+            "Content-Type": "application/x-www-form-urlencoded"
+        },
+        body: queryString.stringify({
+            client_id: clientId,
+            client_secret: clientSecret,
+            grant_type: "refresh_token",
+            refresh_token: refreshToken
+        })
+    })
+    let newToken = await response.json();
+    console.log(newToken)
+    return newToken.access_token;
+}
+
+// regenerateToken("1000.79F036M9ZLSBZNO7WRD9DHGIADVPXH","97937691c11c59eab4e7d00e2062332a7fd1cf3f26","1000.8895241e35f7259fca7c1644bf51eb64.f3ee5cf55e0c1aca8264989b0062cf57")
 
 //============================================
 function permanentlyDeleteClient(client_id){
