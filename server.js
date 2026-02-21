@@ -1058,7 +1058,7 @@ async function get_project_count(){
 }
 
 async function get_valid_token_count(){
-    const query= "select count(*) as valid_tokens from token where is_valid=0";
+    const query= "select count(*) as valid_tokens from token t join project p on p.project_id = t.project_id where p.is_trashed=0 and t.created_time >= now() - interval 1 hour";
     return new Promise((resolve,reject)=>{
         connection.query(query,(err,result)=>{
             if(err){
@@ -1069,10 +1069,12 @@ async function get_valid_token_count(){
         })
         
     })
+    
 }
 
 async function get_expired_token_count(){
-    const query= "select count(*) as expired_tokens from token where is_valid=1";
+
+    const query= "select count(*) as expired_tokens from token t join project p on p.project_id = t.project_id where p.is_trashed=0 and t.created_time < now() - interval 1 hour";
     return new Promise((resolve,reject)=>{
         connection.query(query,(err,result)=>{
             if(err){
