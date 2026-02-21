@@ -1,4 +1,4 @@
-create table client (id int primary key auto_increment,name tinytext,description varchar(500),client_id tinytext, client_secret tinytext,is_trashed boolean default false);
+create table client (id int primary key auto_increment,name tinytext,description varchar(500),client_id tinytext, client_secret tinytext,is_trashed boolean default false,domain varchar(100),type varchar(50));
 
 create table project(project_id int primary key auto_increment,name tinytext,description varchar(500),scopes varchar(1000),auto_regeneration boolean ,is_trashed boolean default false,client_id int,foreign key (client_id) references client(id) on delete cascade on update cascade);
 

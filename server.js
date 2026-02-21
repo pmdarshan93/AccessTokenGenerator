@@ -7,6 +7,45 @@ const clipboardy = require('clipboardy');
 const copyPaste = require('copy-paste');
 let insertId=0;
 
+// let domains = {
+//     "IN" :{
+//         auth : "https://accounts.zoho.in/oauth/v2/auth",
+//         token : "https://accounts.zoho.in/oauth/v2/token"
+//     },
+//     "US" :{
+//         auth : "https://accounts.zoho.com/oauth/v2/auth",
+//         token : "https://accounts.zoho.com/oauth/v2/token"   
+//     },
+//     "AU" :{
+//         auth : "https://accounts.zoho.com.au/oauth/v2/auth",
+//         token : "https://accounts.zoho.com.au/oauth/v2/token"   
+//     },
+//     "JP" :{
+//         auth : "https://accounts.zoho.jp/oauth/v2/auth",
+//         token : "https://accounts.zoho.jp/oauth/v2/token"   
+//     },
+//     "CA" :{
+//         auth : "https://accounts.zohocloud.ca/oauth/v2/auth",
+//         token : "https://accounts.zohocloud.ca/oauth/v2/token"   
+//     },
+//     "SA" :{
+//         auth : "https://accounts.zoho.sa/oauth/v2/auth",
+//         token : "https://accounts.zoho.sa/oauth/v2/token"   
+//     },
+//     "UK" :{
+//             auth : "https://accounts.zoho.uk/oauth/v2/auth",
+//             token : "https://accounts.zoho.uk/oauth/v2/token"   
+//     },
+//     "csez" :{
+//         auth : "https://accounts.zoho.csez/oauth/v2/auth",
+//         token : "https://accounts.zoho.csez/oauth/v2/token"   
+//     },
+//     "local" :{
+//         auth : "https://accounts.localzoho.com/oauth/v2/auth",
+//         token : "https://accounts.localzoho.com/oauth/v2/token"   
+//     }
+// }
+// // console.log(domains.get("US"))
 
 const queryString = require('querystring')
 const { connection } = require('./public/utils/dbConnection');
@@ -45,10 +84,11 @@ app.get("/AllClients", async (req, res) => {
     }
 })
 
+
 app.post("/addClient", async (req, res) => {
-    let { name, description, client_id, client_secret } = req.body;
+    let { name, description, client_id, client_secret,domain,type } = req.body;
     try {
-        let storeStatus = await addClientInDb(name, description, client_id, client_secret);
+        let storeStatus = await addClientInDb(name, description, client_id, client_secret,domain,type);
         res.sendStatus(storeStatus)
     } catch (err) {
         console.log(err)
@@ -75,6 +115,7 @@ app.get("/getAllProjects", async (req, res) => {
 })
 
 function changeTime(time){
+    // console.log(time)
     return new Date(+time).toLocaleString("en-US", {
         dateStyle: "short",
         timeStyle: "short"
@@ -84,14 +125,16 @@ function changeTime(time){
 
 app.post("/addProject", async (req, res) => {
     let { name, description, scope, clientId, autoRegeneration } = req.body;
+    console.log(req.body)
     try {
         let uniqueStatus = await checkDuplicateProject(name);
         if (uniqueStatus) {
             let id = await createProjectInDb(name, description, scope, clientId, autoRegeneration);
+            console.log("ccccccccccccccccccccCC",id)
             if (id) {
-                let clientDetails = await getClientDetailsFromDB(clientId);
-                let client_id = clientDetails.client_id
-                insertId =id
+                // let clientDetails = await getClientDetailsFromDB(clientId);
+                // let client_id = clientDetails.client_id
+                insertId =id;
                 return res.json({"project_id" : insertId});
             }
             return res.sendStatus(404);
@@ -116,7 +159,8 @@ app.get('/newProject', async (req, res) => {
         console.log(tokens);
         let createStatus = await createTokenInDB(tokens,projectId==0?insertId:projectId);
         if (createStatus) {
-            return res.redirect("https://pali-client.csez.zohocorpin.com:8000")
+            // return res.redirect("https://pali-client.csez.zohocorpin.com:8000")
+            return res.redirect("https://preide.pali.io/")
         }
         res.sendStatus(404);
     } catch (err) {
@@ -129,6 +173,7 @@ app.get('/getClient', async (req,res)=>{
     let {clientId}= req.query;
     try{
         let clientDetails = await getClientDetailsFromDB(clientId);
+        // clientDetails.domain=domains[clientDetails.domain].auth
         res.json({"data" : [clientDetails]})
     }catch(err){
         console.log(err)
@@ -137,9 +182,9 @@ app.get('/getClient', async (req,res)=>{
 })
 
 app.post('/editClient', async (req, res) => {
-    let { name, description, clientId } = req.body;
+    let { name, description, clientId, domain,scope} = req.body;
     try {
-        let updateStatus = await updateClientInDb(name, description, clientId);
+        let updateStatus = await updateClientInDb(name, description, clientId,domain,scope);
         res.sendStatus(updateStatus ? 200 : 404);
     } catch (err) {
         console.log(err);
@@ -148,7 +193,7 @@ app.post('/editClient', async (req, res) => {
 })
 
 app.post("/deleteClient", async (req, res) => {
-    let { clientId, reason } = req.body;
+    let { clientId } = req.body;
     try {
         let deleteStatus = await deleteClient(clientId, reason);
         if (deleteStatus) {
@@ -175,8 +220,9 @@ app.get("/getProjectsOfClient", async (req, res) => {
 app.get("/getProject",async (req,res)=>{
     let {projectId} =req.query
     try{
-        console.log(projectId+",")
+        // console.log("projectId",projectId)
         let project= await getProjectDetailsFromDb(projectId)
+        // console.log(project.created_time)
         project.created_time = changeTime(project.created_time)
         res.json({"data" : [project]});
     }catch(err){
@@ -217,10 +263,11 @@ app.post("/editProject", async (req, res) => {
 //     }
 // })
 
+
 app.post("/deleteProject", async (req, res) => {
-    let { project_id, reason } = req.body;
+    let { project_id } = req.body;
     try {
-        let deleteStatus = await deleteProject(project_id, reason);
+        let deleteStatus = await deleteProject(project_id);
         if (deleteStatus) {
             return res.sendStatus(200)
         }
@@ -231,15 +278,16 @@ app.post("/deleteProject", async (req, res) => {
     }
 })
 
+
 app.post("/regenerateToken", async (req, res) => {
     let { projectId } = req.body;
     try {
         let tokens = await getTokenFromDb(projectId);
-        // console.log(tokens)
+        // console.log(tokens.refresh_token)
         let project = await getProjectDetailsFromDb(projectId);
         // console.log(project)
         let client = await getClientDetailsFromDB(project.client_id);
-        // console.log(client)
+        // console.log(client.client_id,client)
         let newAccessToken = await regenerateToken(client.client_id, client.client_secret, tokens.refresh_token);
         let updateStatus = await updateAccessToken(tokens.token_id, newAccessToken);
         if (updateStatus) {
@@ -265,27 +313,6 @@ app.post("/restoreClient", async (req, res) => {
         res.sendStatus(500);
     }
 })
-
-app.post("/restoreProject", async (req, res) => {
-    let { trashId } = req.body;
-    try {
-        let projectId = await restoreProject(trashId);
-        if (projectId) {
-            let project = await getProjectDetailsFromDb(projectId);
-            let clientDetails = await getClientDetailsFromDB(project.client_id);
-            return res.json({
-                clientId: clientDetails.client_id,
-                scope : project.scope,
-                "projectId" : project.project_id
-            });
-        }
-        res.sendStatus(404);
-    } catch (err) {
-        console.log(err);
-        res.sendStatus(500);
-    }
-})
-
 
 
 app.get("/allLog",async (req,res)=>{
@@ -316,8 +343,9 @@ app.get("/getAllClientTrash", async (req, res) => {
 
 // ========================== DB
 
+
 async function getAllClients() {
-    let query = "select * from client where is_trashed=false";
+    let query = "select c.*,count(p.project_id) as project_count from client c left join project p on c.id = p.client_id and p.is_trashed = 0 where c.is_trashed = 0 group by c.id";
     return new Promise((resolve, reject) => {
         connection.query(query, (err, result) => {
             if (err) {
@@ -329,12 +357,12 @@ async function getAllClients() {
     })
 }
 
-async function addClientInDb(name, description, client_id, client_secret) {
+async function addClientInDb(name, description, client_id, client_secret,client_domain,client_type) {
     let uniqueStatus = await checkDuplicateClientId(client_id);
     return new Promise((resolve, reject) => {
         if (uniqueStatus) {
-            let query = "insert into client (name,description,client_id,client_secret) values (?,?,?,?)";
-            connection.query(query, [name, description, client_id, client_secret], (err, result) => {
+            let query = "insert into client (name,description,client_id,client_secret,domain,type) values (?,?,?,?,?,?)";
+            connection.query(query, [name, description, client_id, client_secret,client_domain,client_type], (err, result) => {
                 if (err) {
                     console.log("ADD CLIENT IN DB ERROR\n", err)
                     reject(500);
@@ -395,7 +423,7 @@ async function createProjectInDb(name, description, scope, clientId, autoRegener
                 console.log(" CREATE PROJECT IN Db ERROR", err);
                 reject(500);
             }
-            console.log(result.insertId)
+            console.log("aaaaaaaaaa",result.insertId)
             resolve(result.insertId);
         })
     })
@@ -450,10 +478,10 @@ async function createTokenInDB(token, projectId) {
     })
 }
 
-async function updateClientInDb(name, description, client_id) {
-    let query = "update client set name =?,description = ? where id = ?";
+async function updateClientInDb(name, description, client_id,domain,scope) {
+    let query = "update client set name =?,description = ?,domain=? ,scope=? where id = ?";
     return new Promise((resolve, reject) => {
-        connection.query(query, [name, description, client_id], (err, result) => {
+        connection.query(query, [name, description,domain, scope,client_id], (err, result) => {
             if (err) {
                 console.log("UPDATE CLIENT IN DB ERROR\n", err)
                 reject(500)
@@ -468,7 +496,7 @@ async function updateClientInDb(name, description, client_id) {
 
 async function deleteClient(clientId, reason) {
     let query = "update client set is_trashed=true where id = ?";
-    let trashQuery = "insert into client_trash (deleted_date,reason,client_id) values (?,?,?)"
+    let trashQuery = "insert into client_trash (deleted_date,client_id) values (?,?,?)"
     return new Promise((resolve, reject) => {
         connection.beginTransaction((err) => {
             if (err) {
@@ -544,52 +572,7 @@ async function updateProjectInDb(name, description, scope,auto_regeneration, pro
 //     })
 // }
 
-async function deleteProject(projectId, reason) {
-    let query = "update project set is_trashed=true where project_id = ?";
-    let trashQuery = "insert into project_trash (deleted_date,reason,project_id) values (?,?,?)"
-    let tokenQuery = "delete from token where project_id = ?"
-    return new Promise((resolve, reject) => {
-        connection.beginTransaction((err) => {
-            if (err) {
-                console.log("DELETE PROJECT TRANSACTION ERROR", err);
-                reject(500);
-            }
-            connection.query(query, [projectId], (err, result) => {
-                if (err) {
-                    console.log("DELETE PROJECT ERROR", err);
-                    return connection.rollback(() => reject(500));
-                }
-                if (result.affectedRows === 1) {
-                    connection.query(trashQuery, [new Date(), reason, projectId], (errr, result2) => {
-                        if (errr) {
-                            console.log("INSERT IN PROJECT TRASH ERROR", err)
-                            return connection.rollback(() => reject(500));
-                        }
-                        if (result2.affectedRows === 1) {
-                            connection.query(tokenQuery, projectId, (err3, result3) => {
-                                if (err3) {
-                                    console.log("TOKEN DELETE ERR", err)
-                                    return connection.rollback(() => reject(500));
-                                }
-                                if (result3.affectedRows === 1) {
-                                    connection.commit((err) => {
-                                        if (err) {
-                                            console.log("DELETE PROJECT COMMIT ERROR\n", err)
-                                            return connection.rollback(() => reject(500))
-                                        }
-                                        resolve(true);
-                                    })
-                                } else {
-                                    return connection.rollback(() => reject(500));
-                                }
-                            })
-                        };
-                    })
-                }
-            })
-        })
-    })
-}
+
 
 async function getTokenFromDb(projectId) {
     let query = "select * from token t join project p on t.project_id = p.project_id where p.is_trashed=false and p.project_id = ?";
@@ -671,55 +654,6 @@ async function restoreClient(trashId) {
     })
 }
 
-
-async function restoreProject(trashId) {
-    let query = "select project_id from project_trash where trash_id = ?";
-    let restoreQuery = "update project set is_trashed= false where project_id = ?";
-    let deleteTrash = "delete from project_trash where trash_id = ?";
-    return new Promise((resolve, reject) => {
-        connection.beginTransaction((err) => {
-            if (err) {
-                console.log("RESTORE PROJECT TRANSACTION ERROR\n", err)
-                reject(500);
-            }
-            connection.query(query, [trashId], (err, result) => {
-                if (err) {
-                    console.log("GET PROJECT iD ERROR\n", err);
-                    return connection.rollback(() => reject(500))
-                }
-                let projectDetails=result[0]
-                connection.query(restoreQuery, [projectDetails.project_id], (err2, result2) => {
-                    if (err2) {
-                        console.log("UPDATE PROJECT IS TRASHED ERR\n", err2);
-                        return connection.rollback(() => reject(500));
-                    }
-                    if (result2.affectedRows === 1) {
-                        connection.query(deleteTrash,[trashId],(err3,result3)=>{
-                            if(err3){
-                                console.log("DELETE PROJECT TRASH ERROR",err3);
-                                connection.rollback(()=>{reject(500)})
-                            }
-                            if(result3.affectedRows==1){
-                                connection.commit((err4) => {
-                                    if (err4) {
-                                        console.log("UPDATE PROJECT COMMIT ERROR", err);
-                                        return connection.rollback(() => reject(500))
-                                    }
-                                    resolve(result[0]);
-                                })
-                            }
-                        })
-                    } else {
-                        return connection.rollback(() => reject(500));
-                    }
-                })
-            })
-        })
-    })
-}
-
-
-
 async function getLogFromDb(){
     let query= "select * from log";
     return new Promise((resolve,reject)=>{
@@ -734,41 +668,12 @@ async function getLogFromDb(){
     })
 }
 
-async function getLastProjectId(){
-    let query = `select auto_increment as id from information_schema.tables where table_schema = "ATG" and table_name = "project"`
-    return new Promise((resolve, reject)=>{
-        connection.query(query,(err,result)=>{
-            if(err){
-                console.log("GET LAST PROJECT ID ERROR, ", err)
-                return reject(500)
-            }
-            console.log(result[0].id)
-            resolve(result[0].id)
-        })
-    })
-}
-// getLastProjectId()
-
-
-function getAllClientTrash() {
-    
-    const query = "select * from client_trash ct join client c on c.id=ct.client_id where c.is_trashed=1";
-    return new Promise((resolve, reject) => {
-        connection.query(query, (err, result) => {
-            if (err) {
-                console.error("ERROR : ", err);
-                return reject(err);
-            }
-            resolve(result);
-        });
-    });
-}
 
 // ============================================
 
 async function genrateTokens(grandToken, clientId, clientSecret) {
     console.log(grandToken,clientId,clientSecret)
-    let response = await fetch("https://accounts.zoho.in/oauth/v2/token", {
+    let response = await fetch("https://accounts.zoho.com/oauth/v2/token", {
         method: "POST",
         headers: {
             "Content-Type": "application/x-www-form-urlencoded"
@@ -786,8 +691,8 @@ async function genrateTokens(grandToken, clientId, clientSecret) {
 }
 
 async function regenerateToken(clientId, clientSecret, refreshToken) {
-    console.log(clientId, clientSecret, refreshToken)
-    let response = await fetch("https://accounts.zoho.in/oauth/v2/token", {
+    // console.log("aaaaaaa",clientId, clientSecret, refreshToken)
+    let response = await fetch("https://accounts.zoho.com/oauth/v2/token", {
         method: "POST",
         headers: {
             "Content-Type": "application/x-www-form-urlencoded"
@@ -805,6 +710,21 @@ async function regenerateToken(clientId, clientSecret, refreshToken) {
 }
 
 // regenerateToken("1000.79F036M9ZLSBZNO7WRD9DHGIADVPXH","97937691c11c59eab4e7d00e2062332a7fd1cf3f26","1000.8895241e35f7259fca7c1644bf51eb64.f3ee5cf55e0c1aca8264989b0062cf57")
+
+//============================================
+function getAllClientTrash() {
+    
+    const query = "select * from client_trash ct join client c on c.id=ct.client_id where c.is_trashed=1";
+    return new Promise((resolve, reject) => {
+        connection.query(query, (err, result) => {
+            if (err) {
+                console.error("ERROR : ", err);
+                return reject(err);
+            }
+            resolve(result);
+        });
+    });
+}
 
 //============================================
 function permanentlyDeleteClient(client_id){
@@ -872,7 +792,7 @@ async function restoreClient(trashId) {
                 console.log("RESTORE CLIENT TRANSACTION ERROR \n", err);
                 reject(500);
             }
-            connection.query(query, trashId, (err, result) => {
+            connection.query(query, [trashId], (err, result) => {
                 if (err) {
                     console.log("RESTORE CLIENT GET CLIENT ID ERR", err);
                     return connection.rollback(() => reject(500));
@@ -906,55 +826,12 @@ async function restoreClient(trashId) {
 }
 
 
-async function restoreProject(trashId) {
-    let query = "select project_id from project_trash where trash_id = ?";
-    let restoreQuery = "update project set is_trashed= false where project_id = ?";
-    let deleteTrash = "delete from project_trash where trash_id = ?";
-    return new Promise((resolve, reject) => {
-        connection.beginTransaction((err) => {
-            if (err) {
-                console.log("RESTORE PROJECT TRANSACTION ERROR\n", err)
-                reject(500);
-            }
-            connection.query(query, [trashId], (err, result) => {
-                if (err) {
-                    console.log("GET PROJECT iD ERROR\n", err);
-                    return connection.rollback(() => reject(500))
-                }
-                let projectDetails=result[0]
-                connection.query(restoreQuery, [projectDetails.project_id], (err2, result2) => {
-                    if (err2) {
-                        console.log("UPDATE PROJECT IS TRASHED ERR\n", err2);
-                        return connection.rollback(() => reject(500));
-                    }
-                    if (result2.affectedRows === 1) {
-                        connection.query(deleteTrash,[trashId],(err3,result3)=>{
-                            if(err3){
-                                console.log("DELETE PROJECT TRASH ERROR",err3);
-                                connection.rollback(()=>{reject(500)})
-                            }
-                            if(result3.affectedRows==1){
-                                connection.commit((err4) => {
-                                    if (err4) {
-                                        console.log("UPDATE PROJECT COMMIT ERROR", err);
-                                        return connection.rollback(() => reject(500))
-                                    }
-                                    resolve(result[0]);
-                                })
-                            }
-                        })
-                    } else {
-                        return connection.rollback(() => reject(500));
-                    }
-                })
-            })
-        })
-    })
-}
+
 
 app.post("/restoreClient", async (req, res) => {
     console.log("======>came inside restoreClient")
-    let { id } = req.body;
+    let {id}  = req.body;
+    console.log(id)
     try {
         let restoreStatus = await restoreClient(id);
         if (restoreStatus) {
@@ -967,25 +844,37 @@ app.post("/restoreClient", async (req, res) => {
     }
 })
 
-app.post("/restoreProject", async (req, res) => {
-    let { trashId } = req.body;
+
+
+function getAllClientTrash() {
+    const query = "select * from client_trash ct join client c on c.id=ct.client_id where c.is_trashed=1";
+    return new Promise((resolve, reject) => {
+        connection.query(query, (err, result) => {
+            if (err) {
+                console.error("ERROR : ", err);
+                return reject(err);
+            }
+            console.log("all deleted clients get!")
+            resolve(result);
+        });
+    });
+}
+app.get("/getAllClientTrash", async (req, res) => {
     try {
-        let projectId = await restoreProject(trashId);
-        if (projectId) {
-            let project = await getProjectDetailsFromDb(projectId);
-            let clientDetails = await getClientDetailsFromDB(project.client_id);
-            return res.json({
-                clientId: clientDetails.client_id,
-                scope : project.scope,
-                "projectId" : project.project_id
-            });
-        }
-        res.sendStatus(404);
-    } catch (err) {
-        console.log(err);
+        let result = await getAllClientTrash();
+        result.forEach((e)=>{e.deleted_date=new Date(e.deleted_date).toLocaleString("en-US", {
+            dateStyle: "short",
+            timeStyle: "short"
+          })});
+
+        res.json({"data":result});
+    } catch(err) {
+        console.error("Error read all client details from trash:", err);
         res.sendStatus(500);
     }
-})
+});
+
+
 function clearClientTrash() {
     return new Promise((resolve, reject) => {
         // const deleteProjectTrash = "delete from project_trash";
@@ -1020,7 +909,6 @@ function clearClientTrash() {
 
                         resolve(true);
                     })
-              
                 });
             });
         });
@@ -1041,3 +929,217 @@ app.post("/clearClientTrash", async (req, res) => {
         res.sendStatus(500);
     }
 });
+
+
+function permanentlyDeleteClient(client_id){
+    return new Promise((resolve, reject) => {
+        const del_client_trash = "delete from client_trash where client_id=?";
+        const del_client = "delete from client where id=? and  is_trashed=1";
+        const del_project = "delete p,pt from project p join project_trash pt on p.project_id=pt.project_id where p.client_id=?"
+        connection.query(del_client_trash, [client_id],(err, result) => {
+            if(err){
+                console.log("DELETE CLIENT TRANSACTION ERROR\n", err)
+                reject(500);
+            }
+            connection.query(del_client, [client_id],(err, result) => {
+                if(err){
+                    console.log(err)
+                    return connection.rollback(() => reject(500))
+                }
+                else if(result){
+                    connection.query(del_project, [client_id],(err, result) => {
+                        if(err){
+                            console.log(err)
+                            return connection.rollback(() => reject(500))
+                        }
+                        if(result){
+                            connection.commit((err) => {
+                                if (err) {
+                                    console.log(err);
+                                    return connection.rollback(() => reject(500))
+                                }
+                                resolve(true);
+                            })
+                        }
+
+                    })
+                }
+                
+            });
+            
+        })
+    });
+}
+
+app.post("/permanentlyDeleteClient", async (req, res) => {
+    const {id} = req.body;
+    console.log("==========")
+    console.log(req.body)
+
+    try {
+        const result = await permanentlyDeleteClient(id);
+        console.log(result)
+        res.json({ 
+            message: "Client premnanely deleted", 
+        });
+    } catch (err) {
+        res.sendStatus(500);
+    }
+})
+
+app.get("/last_week_activity", async (req, res) => {
+    try {
+        const result = await lastWeekActivity();
+        res.json(result);
+    } catch (err) {
+        console.error(err);
+        res.sendStatus(500);
+    }
+});
+
+function lastWeekActivity() {
+    return new Promise((resolve, reject) => {
+        const query = "select action, time from log where time >= date_sub(curdate(), interval weekday(curdate()) + 7 day) and time < date_sub(curdate(), interval weekday(curdate()) day)";
+
+        connection.query(query, (err, result) => {
+            if (err) {
+                return reject(500);
+            }
+
+            const counts = {
+                0: { create: 0, delete: 0, regenerate: 0 }, 
+                1: { create: 0, delete: 0, regenerate: 0 }, 
+                2: { create: 0, delete: 0, regenerate: 0 }, 
+                3: { create: 0, delete: 0, regenerate: 0 }, 
+                4: { create: 0, delete: 0, regenerate: 0 }, 
+                5: { create: 0, delete: 0, regenerate: 0 }, 
+                6: { create: 0, delete: 0, regenerate: 0 }  
+            };
+
+            for (const row of result) {
+                if (!row.time) {
+                    continue;
+                }
+
+                const dateObj = new Date(row.time);
+               
+
+                const dayOfWeek = dateObj.getDay(); // Get the numeric day of the week
+                if (counts[dayOfWeek]) {
+                    if (row.action == "create") counts[dayOfWeek].create++;
+                    if (row.action == "delete") counts[dayOfWeek].delete++;
+                    if (row.action == "regenerate") counts[dayOfWeek].regenerate++;
+                }
+            }
+
+            let maxCreate = 0, maxDelete = 0, maxRegenerate = 0;
+            for (const day in counts) {
+                if (counts[day].create > maxCreate) maxCreate = counts[day].create;
+                if (counts[day].delete > maxDelete) maxDelete = counts[day].delete;
+                if (counts[day].regenerate > maxRegenerate) maxRegenerate = counts[day].regenerate;
+            }
+
+            const dataArray = [];
+            for (const day in counts) {
+                const c = maxCreate > 0 ? (counts[day].create / maxCreate) * 100 : 0;
+                const d = maxDelete > 0 ? (counts[day].delete / maxDelete) * 100 : 0;
+                const r = maxRegenerate > 0 ? (counts[day].regenerate / maxRegenerate) * 100 : 0;
+
+                dataArray.push({
+                    day: day,
+                    create: Number(c.toFixed(2)),
+                    up_create: Number((100 - c).toFixed(2)),
+                    delete: Number(d.toFixed(2)),
+                    up_delete: Number((100 - d).toFixed(2)),
+                    regenerate: Number(r.toFixed(2)),
+                    up_regenerate: Number((100 - r).toFixed(2))
+                });
+            }
+
+            resolve({ data: dataArray });
+        });
+    });
+}
+async function get_client_count(){
+    const query= "select count(*) as total_clients from client where is_trashed = 0";
+    return new Promise((resolve,reject)=>{
+        connection.query(query,(err,result)=>{
+            if(err){
+                console.log("GET client_count FROM DB ERROR",err)
+                reject(500);
+            }
+            resolve(result)
+        })
+        
+    })
+}
+
+async function get_project_count(){
+    const query= "select count(*) as total_projects from project where is_trashed = 0";
+    return new Promise((resolve,reject)=>{
+        connection.query(query,(err,result)=>{
+            if(err){
+                console.log("GET project_count FROM DB ERROR",err)
+                reject(500);
+            }
+            resolve(result)
+        })
+        
+    })
+}
+
+async function get_valid_token_count(){
+    const query= "select count(*) as valid_tokens from token where is_valid=0";
+    return new Promise((resolve,reject)=>{
+        connection.query(query,(err,result)=>{
+            if(err){
+                console.log("GET valid_token_count FROM DB ERROR",err)
+                reject(500);
+            }
+            resolve(result)
+        })
+        
+    })
+}
+
+async function get_expired_token_count(){
+    const query= "select count(*) as expired_tokens from token where is_valid=1";
+    return new Promise((resolve,reject)=>{
+        connection.query(query,(err,result)=>{
+            if(err){
+                console.log("GET expired_token_count FROM DB ERROR",err)
+                reject(500);
+            }
+            resolve(result)
+        })
+        
+    })
+}
+
+
+app.get("/getDashboardInfo", async (req, res) => {
+    try {
+        const client_count = await get_client_count();
+        const project_count = await get_project_count();
+        const valid_token_count = await get_valid_token_count();
+        const expired_token_count = await get_expired_token_count();
+
+        const response = {
+            data: [{
+                total_clients: client_count[0].total_clients,
+                total_projects: project_count[0].total_projects,
+                valid_tokens : valid_token_count[0].valid_tokens,
+                expired_tokens : expired_token_count[0].expired_tokens
+                
+
+            }]
+        };
+
+        res.json(response);
+
+    } catch (err) {
+        console.error(err);
+        res.sendStatus(500);
+    }
+});
+

@@ -156,7 +156,7 @@ async function restoreProject(){
     console.log("ssssssssssss")
         let details=await request.json();
         console.log(details);
-        window.location.href= `https://accounts.zoho.in/oauth/v2/auth?response_type=code&client_id=${details.clientId}&scope=${"ZohoCliq.messageactions.DELETE"}&redirect_uri=http://localhost:2507/newProject&access_type=offline&prompt=consent&projectid=${details.projectId}`
+        window.location.href= `https://accounts.zoho.in/oauth/v2/auth?response_type=code&client_id=${details.clientId}&scope=${"ZohoMCP.tool.execute"}&redirect_uri=http://localhost:2507/newProject&access_type=offline&prompt=consent&projectid=${details.projectId}`
 }
 
 async function editScope(){
