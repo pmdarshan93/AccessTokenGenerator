@@ -445,6 +445,7 @@ async function deleteClient(clientId) {
     let query = "update client set is_trashed=true where id = ?";
     let trashQuery = "insert into client_trash (deleted_date,client_id) values (?,?)"
     let deleteProject = "update project set is_trashed =1 where client_id = ?"
+    // let projectTrashQuery = "insert into project_trash (deleted_date,project) values (?,?)"
     
     return new Promise((resolve, reject) => {
         connection.beginTransaction((err) => {
@@ -494,15 +495,43 @@ async function deleteClient(clientId) {
 
 async function deleteProject(projectId) {
     let query = "update project set is_trashed =1 where project_id = ?"
+    let insertQuery = "insert into project_trash(deleted_date,project_id) values(?,?)"
     
     return new Promise((resolve, reject) => {
-        connection.query(query, [projectId], (err, result) => {
+        connection.beginTransaction((err) => {
             if (err) {
-                console.log("DELETE PROJECT IN DB ERROR", err);
+                console.log("DELETE PROJECT TRANSACTION ERROR", err);
                 reject(500);
             }
-            resolve(true);
+
+            connection.query(query, [projectId], (err, result) => {
+                if (err) {
+                    console.log("DELETE PROJECT IN DB ERROR", err);
+                    return connection.rollback(() => reject(500));
+                }
+                connection.query(insertQuery, [new Date(),projectId], (err, result) => {
+                    if (err) {
+                        console.log("DELETE PROJECT IN DB ERROR", err);
+                        return connection.rollback(() => reject(500));
+                    }
+
+                    if (result.affectedRows == 1) {
+                        console.log(result+"====")
+                        connection.commit((err4) => {
+                            if (err4) {
+                                console.log("DELETE PROJECt TRANSACTION COMMIT ERROR", err4);
+                                return connection.rollback(() => reject(500));
+                            }
+                            resolve(true);
+                        })
+                    } else {
+                        return connection.rollback(() => reject(500))
+                    }
+                })
+                
+            })
         })
+        
     })
 }
 
@@ -707,6 +736,9 @@ async function restoreClient(trashId) {
     let restoreQuery = "update client set is_trashed= false where id = ?";
     let deleteTrash = "delete from client_trash where client_id = ?";
     let restoreProject = "update project set is_trashed =0 where client_id = ?"
+    let deleteProjectTrash = "delete pt from project_trash pt join project p on pt.project_id = p.project_id where p.client_id =?"
+
+
     return new Promise((resolve, reject) => {
         connection.beginTransaction((err) => {
             if (err) {
@@ -741,19 +773,20 @@ async function restoreClient(trashId) {
                                     console.log(err)
                                     return connection.rollback(() => reject(500))
                                 }
-                                
-                                if(result){
-                                    console.log("==========================+++++++++++++++++++")
+                                connection.query(deleteProjectTrash,[clientDetails.clientId],(err,result)=>{
+                                    if(err){
+                                        console.log("DELETE PROJECT ERROR",err)
+                                        return connection.rollback(()=>{reject(500)})
+                                    }
                                     connection.commit((err) => {
                                         if (err) {
-                                            console.log(err);
+                                            console.log("COMMIT RESTORE CLIENT ERROR",err);
                                             return connection.rollback(() => reject(500))
                                         }
-                                        console.log("IDDDD: "+trashId)
+                                        console.log(result)
                                         resolve(true);
                                     })
-                                }
-        
+                                })                                                          
                             })
                         }
                     })
@@ -799,7 +832,7 @@ function getAllClientTrash() {
             resolve(result);
         });
     });
-    
+
 }
 app.get("/getAllClientTrash", async (req, res) => {
     try {
@@ -815,6 +848,36 @@ app.get("/getAllClientTrash", async (req, res) => {
         res.sendStatus(500);
     }
 });
+
+
+function getAllProjectTrash() {
+    const query = "select * from project_trash pt join project p on p.project_id=pt.project_id where p.is_trashed=1";
+    return new Promise((resolve, reject) => {
+        connection.query(query, (err, result) => {
+            if (err) {
+                console.error("ERROR : ", err);
+                return reject(err);
+            }
+            resolve(result);
+        });
+    });
+
+}
+app.get("/getAllProjectTrash", async (req, res) => {
+    try {
+        let result = await getAllProjectTrash();
+        result.forEach((e)=>{e.deleted_date=new Date(e.deleted_date).toLocaleString("en-US", {
+            dateStyle: "short",
+            timeStyle: "short"
+        })});
+
+        res.json({"data":result});
+    } catch(err) {
+        console.error("Error read all client details from trash:", err);
+        res.sendStatus(500);
+    }
+});
+
 
 
 function clearClientTrash() {
@@ -945,62 +1008,62 @@ app.get("/last_week_activity", async (req, res) => {
 
 function lastWeekActivity() {
     return new Promise((resolve, reject) => {
-        const query = "select action, time from log where time >= date_sub(curdate(), interval weekday(curdate()) + 7 day) and time < date_sub(curdate(), interval weekday(curdate()) day)";
+
+        const query = "select action, date(time) as date from log where date(time) between date_sub(curdate(),interval 6 day) and curdate()"
 
         connection.query(query, (err, result) => {
-            if (err) {
-                return reject(500);
+            if (err){ 
+                return reject(err);
             }
 
-            const counts = {
-                0: { create: 0, delete: 0, regenerate: 0 }, 
-                1: { create: 0, delete: 0, regenerate: 0 }, 
-                2: { create: 0, delete: 0, regenerate: 0 }, 
-                3: { create: 0, delete: 0, regenerate: 0 }, 
-                4: { create: 0, delete: 0, regenerate: 0 }, 
-                5: { create: 0, delete: 0, regenerate: 0 }, 
-                6: { create: 0, delete: 0, regenerate: 0 }  
-            };
+            const counts = [];
+            const today = new Date();
+            today.setHours(0,0,0,0);
 
-            for (const row of result) {
-                if (!row.time) {
-                    continue;
-                }
-
-                const dateObj = new Date(row.time);
-               
-
-                const dayOfWeek = dateObj.getDay(); // Get the numeric day of the week
-                if (counts[dayOfWeek]) {
-                    if (row.action == "create") counts[dayOfWeek].create++;
-                    if (row.action == "delete") counts[dayOfWeek].delete++;
-                    if (row.action == "regenerate") counts[dayOfWeek].regenerate++;
-                }
-            }
-
-            let maxCreate = 0, maxDelete = 0, maxRegenerate = 0;
-            for (const day in counts) {
-                if (counts[day].create > maxCreate) maxCreate = counts[day].create;
-                if (counts[day].delete > maxDelete) maxDelete = counts[day].delete;
-                if (counts[day].regenerate > maxRegenerate) maxRegenerate = counts[day].regenerate;
-            }
-
-            const dataArray = [];
-            for (const day in counts) {
-                const c = maxCreate > 0 ? (counts[day].create / maxCreate) * 100 : 0;
-                const d = maxDelete > 0 ? (counts[day].delete / maxDelete) * 100 : 0;
-                const r = maxRegenerate > 0 ? (counts[day].regenerate / maxRegenerate) * 100 : 0;
-
-                dataArray.push({
-                    day: day,
-                    create: Number(c.toFixed(2)),
-                    up_create: Number((100 - c).toFixed(2)),
-                    delete: Number(d.toFixed(2)),
-                    up_delete: Number((100 - d).toFixed(2)),
-                    regenerate: Number(r.toFixed(2)),
-                    up_regenerate: Number((100 - r).toFixed(2))
+            for (let i = 6; i >= 0; i--) {
+                const d = new Date(today);
+                d.setDate(d.getDate() - i);
+                const dateStr = d.toISOString().split('T')[0]; 
+                counts.push({
+                    date: dateStr,
+                    create: 0,
+                    delete: 0,
+                    regenerate: 0
                 });
             }
+
+            result.forEach(row => {
+                let rowDateStr;
+                if (typeof row.date == 'string') {
+                    rowDateStr = row.date;
+                } else if (row.date instanceof Date) {
+                    rowDateStr = row.date.toISOString().split('T')[0];
+                } else {
+                    rowDateStr = row.date + ''; // fallback
+                }
+
+         
+                const day = counts.find(d => d.date === rowDateStr);
+                if (day) {
+                    if (row.action.toLowerCase() == 'create') day.create++;
+                    if (row.action.toLowerCase() == 'delete') day.delete++;
+                    if (row.action.toLowerCase() == 'regenerate') day.regenerate++;
+                }
+            });
+
+            const maxCreate = Math.max(...counts.map(d => d.create));
+            const maxDelete = Math.max(...counts.map(d => d.delete));
+            const maxRegenerate = Math.max(...counts.map(d => d.regenerate));
+
+            const dataArray = counts.map(d => ({
+                date: d.date,
+                create: d.create,
+                up_create: maxCreate ? Number((100 - (d.create / maxCreate * 100)).toFixed(2)) : 100,
+                delete: d.delete,
+                up_delete: maxDelete ? Number((100 - (d.delete / maxDelete * 100)).toFixed(2)) : 100,
+                regenerate: d.regenerate,
+                up_regenerate: maxRegenerate ? Number((100 - (d.regenerate / maxRegenerate * 100)).toFixed(2)) : 100
+            }));
 
             resolve({ data: dataArray });
         });
@@ -1021,7 +1084,7 @@ async function get_client_count(){
 }
 
 async function get_project_count(){
-    const query= "select count(*) as total_projects from project where is_trashed = 0";
+    const query= "select count(*) as total_projects from project p join token t where p.project_id=t.project_id and is_trashed = 0";
     return new Promise((resolve,reject)=>{
         connection.query(query,(err,result)=>{
             if(err){
